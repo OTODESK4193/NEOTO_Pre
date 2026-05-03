@@ -3,58 +3,61 @@
 void AutoLevel::prepare(double sampleRate)
 {
     fs = sampleRate;
-
-    // 最大10秒分のヒストリーバッファを事前確保 (192kHz環境でも約200万サンプル。メモリ負荷は極小)
     const int maxSamples = static_cast<int>(std::ceil(192000.0 * 10.0));
-    historyBuffer.assign(maxSamples, 0.0f);
-    writeIndex = 0;
+    dryHistoryBuffer.assign(maxSamples, 0.0f);
+    wetHistoryBuffer.assign(maxSamples, 0.0f);
+    dryWriteIndex = 0;
+    wetWriteIndex = 0;
 
-    // ゲイン適用時にポップノイズを防ぐため、50msで滑らかにフェードさせる
-    outputGain.reset(sampleRate, 0.05);
-    outputGain.setCurrentAndTargetValue(1.0f); // 初期ゲインは0dB(1.0)
+    latestDryRms.store(0.0f);
+    latestWetRms.store(0.0f);
 }
 
-void AutoLevel::pushSample(float input)
+void AutoLevel::pushDrySample(float input)
 {
-    // 波形をリングバッファに上書き録音していく
-    historyBuffer[writeIndex] = input;
-    writeIndex++;
-    if (writeIndex >= static_cast<int>(historyBuffer.size()))
-        writeIndex = 0;
+    dryHistoryBuffer[dryWriteIndex] = input;
+    dryWriteIndex = (dryWriteIndex + 1) % dryHistoryBuffer.size();
 }
 
-float AutoLevel::calculateRMS(float seconds) const
+void AutoLevel::pushWetSample(float input)
+{
+    wetHistoryBuffer[wetWriteIndex] = input;
+    wetWriteIndex = (wetWriteIndex + 1) % wetHistoryBuffer.size();
+}
+
+void AutoLevel::analyzeRMS(float seconds)
 {
     int numSamples = static_cast<int>(fs * seconds);
-    int bufferSize = static_cast<int>(historyBuffer.size());
+    int bufferSize = static_cast<int>(dryHistoryBuffer.size());
 
     if (numSamples > bufferSize) numSamples = bufferSize;
-    if (numSamples <= 0) return 0.0f;
-
-    double sumSquares = 0.0;
-    int readIdx = writeIndex - 1;
-
-    // 指定された秒数だけ過去に遡り、二乗和を計算する
-    for (int i = 0; i < numSamples; ++i)
-    {
-        if (readIdx < 0) readIdx += bufferSize;
-        float val = historyBuffer[readIdx];
-        sumSquares += static_cast<double>(val * val);
-        readIdx--;
+    if (numSamples <= 0) {
+        latestDryRms.store(0.0f);
+        latestWetRms.store(0.0f);
+        return;
     }
 
-    return static_cast<float>(std::sqrt(sumSquares / numSamples));
-}
+    double sumSquaresDry = 0.0;
+    double sumSquaresWet = 0.0;
 
-void AutoLevel::setTargetGain(float newGain)
-{
-    // 安全装置：極端な爆音や無音によるゲイン暴走を防ぐため、補正範囲を -24dB 〜 +24dB に制限
-    float clampedGain = std::clamp(newGain, 0.063f, 15.8f);
-    outputGain.setTargetValue(clampedGain);
-}
+    int readIdxDry = dryWriteIndex - 1;
+    int readIdxWet = wetWriteIndex - 1;
 
-float AutoLevel::processApplication(float processedSignal)
-{
-    // 出力信号にスタティックなゲインを掛け合わせる
-    return processedSignal * outputGain.getNextValue();
+    for (int i = 0; i < numSamples; ++i)
+    {
+        if (readIdxDry < 0) readIdxDry += bufferSize;
+        if (readIdxWet < 0) readIdxWet += bufferSize;
+
+        float dVal = dryHistoryBuffer[readIdxDry];
+        float wVal = wetHistoryBuffer[readIdxWet];
+
+        sumSquaresDry += static_cast<double>(dVal * dVal);
+        sumSquaresWet += static_cast<double>(wVal * wVal);
+
+        readIdxDry--;
+        readIdxWet--;
+    }
+
+    latestDryRms.store(static_cast<float>(std::sqrt(sumSquaresDry / numSamples)));
+    latestWetRms.store(static_cast<float>(std::sqrt(sumSquaresWet / numSamples)));
 }

@@ -1,6 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
 #include <vector>
+#include <atomic>
 
 class AutoLevel
 {
@@ -10,27 +11,27 @@ public:
 
     void prepare(double sampleRate);
 
-    // フェーズ1: 入力信号をヒストリーバッファに記録する（信号自体は変更・遅延させない）
-    void pushSample(float input);
+    // ヒストリーバッファへの記録
+    void pushDrySample(float input);
+    void pushWetSample(float input);
 
-    // Applyボタンが押された時、指定された秒数遡ってRMSを計算する
-    float calculateRMS(float seconds) const;
+    // 指定秒数遡ってRMSを計算
+    void analyzeRMS(float seconds);
 
-    // 計算された目標ゲインをセットする（適用時は滑らかにランプさせる）
-    void setTargetGain(float newGain);
-
-    // フェーズ5: 最終的なゲインを適用する
-    float processApplication(float processedSignal);
+    // GUI表示用: 最新の解析結果を取得
+    float getLatestDryRMS() const { return latestDryRms.load(); }
+    float getLatestWetRMS() const { return latestWetRms.load(); }
 
 private:
     double fs = 44100.0;
 
-    // 過去の波形を保持するリングバッファ
-    std::vector<float> historyBuffer;
-    int writeIndex = 0;
+    std::vector<float> dryHistoryBuffer;
+    std::vector<float> wetHistoryBuffer;
+    int dryWriteIndex = 0;
+    int wetWriteIndex = 0;
 
-    // 滑らかなゲイン変更のためのスムーザー
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> outputGain;
+    std::atomic<float> latestDryRms{ 0.0f };
+    std::atomic<float> latestWetRms{ 0.0f };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AutoLevel)
 };

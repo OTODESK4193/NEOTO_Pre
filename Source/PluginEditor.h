@@ -3,7 +3,8 @@
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
 
-class NeotoPreAudioProcessorEditor : public juce::AudioProcessorEditor
+class NeotoPreAudioProcessorEditor : public juce::AudioProcessorEditor,
+    public juce::Timer
 {
 public:
     NeotoPreAudioProcessorEditor(NeotoPreAudioProcessor&);
@@ -11,31 +12,39 @@ public:
 
     void paint(juce::Graphics&) override;
     void resized() override;
+    void timerCallback() override;
 
 private:
     NeotoPreAudioProcessor& audioProcessor;
 
-    // スライダーとUIコンポーネント
+    juce::Slider inputGainSlider, outputGainSlider, mixSlider;
     juce::Slider driveSlider, charSlider, asymSlider;
     juce::Slider colorSlider, airSlider, ageSlider;
-    juce::Slider targetLufsSlider;
 
+    juce::ComboBox osModeCombo;
     juce::ComboBox timeCombo;
+    juce::TextButton analyzeButton;
     juce::TextButton applyButton;
+    juce::TextButton listenButton;
 
-    // ラベル
+    juce::Label inputGainLabel, outputGainLabel, mixLabel, osModeLabel;
     juce::Label driveLabel, charLabel, asymLabel;
     juce::Label colorLabel, airLabel, ageLabel;
-    juce::Label targetLufsLabel, timeComboLabel;
+    juce::Label timeComboLabel;
 
-    // APVTS同期アタッチメント
+    juce::Label dryResultLabel;
+    juce::Label wetResultLabel;
+    juce::Label suggestResultLabel;
+
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
     using ComboBoxAttachment = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
+    using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
 
+    std::unique_ptr<SliderAttachment> inputGainAttach, outputGainAttach, mixAttach;
     std::unique_ptr<SliderAttachment> driveAttach, charAttach, asymAttach;
     std::unique_ptr<SliderAttachment> colorAttach, airAttach, ageAttach;
-    std::unique_ptr<SliderAttachment> targetLufsAttach;
-    std::unique_ptr<ComboBoxAttachment> timeAttach;
+    std::unique_ptr<ComboBoxAttachment> osModeAttach, timeAttach;
+    std::unique_ptr<ButtonAttachment> listenAttach;
 
     void setupRotarySlider(juce::Slider& slider, juce::Label& label, const juce::String& name);
 
