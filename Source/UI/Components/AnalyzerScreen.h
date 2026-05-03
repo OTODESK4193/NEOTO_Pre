@@ -18,20 +18,21 @@ private:
     NeotoPreAudioProcessor& audioProcessor;
     float getPositionForFrequency(float freq, float width);
 
-    juce::dsp::FFT fft{ 11 };
-    juce::dsp::WindowingFunction<float> window{ 2048, juce::dsp::WindowingFunction<float>::hann };
+    // ★ FFTエンジンを 4096ポイント(12) に倍増し、低域の解像度を向上
+    juce::dsp::FFT fft{ 12 };
+    juce::dsp::WindowingFunction<float> window{ 4096, juce::dsp::WindowingFunction<float>::hann };
 
-    std::array<float, 4096> eqFftData;
+    std::array<float, 8192> eqFftData;
     juce::Path eqCurvePath;
     void generateEQCurve();
 
-    std::array<float, 4096> spectrumFifo;
-    std::array<float, 4096> spectrumFftData;
-    std::array<float, 1024> smoothedSpectrum{ 0.0f }; // 追加: 波形スムージング用
+    std::array<float, 8192> spectrumFifo;
+    std::array<float, 8192> spectrumFftData;
+    std::array<float, 2048> smoothedSpectrum{ 0.0f }; // 半分のNyquistまで
     juce::Path spectrumPath;
     void drawNextFrameOfSpectrum();
 
-    void calculateHarmonics(); // 追加: 倍音計算ロジック
+    void calculateHarmonics();
 
     Preamp_API virtualPreamp_API;
     OutputTransformer_Steel virtualOut_Steel;

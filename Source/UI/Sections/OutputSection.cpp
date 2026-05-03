@@ -110,7 +110,7 @@ void OutputSection::paint(juce::Graphics& g) {
     int numBars = 7;
     float barWidth = 14.0f;
     float spacing = (thdArea.getWidth() - (numBars * barWidth)) / (numBars - 1);
-    float maxThd = 100.0f; // 基音を100%とする天井
+    float maxThd = 50.0f; 
 
     for (int i = 0; i < numBars; ++i) {
         float val = audioProcessor.harmonicLevels[i].load();
