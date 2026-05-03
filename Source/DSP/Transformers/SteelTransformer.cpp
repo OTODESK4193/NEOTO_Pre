@@ -1,0 +1,72 @@
+#include "SteelTransformer.h"
+#include <cmath>
+
+void SteelTransformer::prepare(double sampleRate)
+{
+    fs = sampleRate;
+    hpfState = 0.0; lastInput = 0.0;
+    apfState = 0.0; lastApfInput = 0.0;
+    lpfState = 0.0;
+    x1 = 0.0; x2 = 0.0; y1 = 0.0; y2 = 0.0;
+
+    lastColorParam = -1.0f; lastAirParam = -1.0f; lastAgeParam = -1.0f;
+}
+
+float SteelTransformer::processSample(float input, float colorParam, float airParam, float ageParam)
+{
+    if (colorParam != lastColorParam) {
+        double fcHpf = juce::jmap(static_cast<double>(colorParam), 0.0, 100.0, 15.0, 5.0);
+        alphaHpf = std::exp(-juce::MathConstants<double>::twoPi * fcHpf / fs);
+
+        double apfFreq = juce::jmap(static_cast<double>(colorParam), 0.0, 100.0, 60.0, 20.0);
+        double tanVal = std::tan(juce::MathConstants<double>::pi * apfFreq / fs);
+        apfAlpha = (tanVal - 1.0) / (tanVal + 1.0);
+        lastColorParam = colorParam;
+    }
+
+    if (airParam != lastAirParam) {
+        // Air: 15kHz Peaking EQ (RBJ Biquad Formula) - 最大+6dBの共振
+        double gainDb = juce::jmap(static_cast<double>(airParam), 0.0, 100.0, 0.0, 6.0);
+        double A = std::pow(10.0, gainDb / 40.0);
+        double w0 = juce::MathConstants<double>::twoPi * 15000.0 / fs;
+        double sin_w0 = std::sin(w0);
+        double cos_w0 = std::cos(w0);
+        double alphaQ = sin_w0 / (2.0 * 0.707); // Q = 0.707
+
+        double a0 = 1.0 + alphaQ / A;
+        b0 = (1.0 + alphaQ * A) / a0;
+        b1 = (-2.0 * cos_w0) / a0;
+        b2 = (1.0 - alphaQ * A) / a0;
+        a1 = (-2.0 * cos_w0) / a0;
+        a2 = (1.0 - alphaQ / A) / a0;
+        lastAirParam = airParam;
+    }
+
+    if (ageParam != lastAgeParam) {
+        // Age: トランスの経年劣化による高域ロールオフ (30kHz -> 10kHz)
+        double fcLpf = juce::jmap(static_cast<double>(ageParam), 0.0, 100.0, 30000.0, 10000.0);
+        alphaLpf = std::exp(-juce::MathConstants<double>::twoPi * fcLpf / fs);
+        lastAgeParam = ageParam;
+    }
+
+    double dIn = static_cast<double>(input);
+
+    // 1. 低域HPF
+    double hpfOut = dIn - lastInput + alphaHpf * hpfState;
+    hpfState = hpfOut; lastInput = dIn;
+
+    // 2. 位相シフト(APF)
+    double apfOut = apfAlpha * hpfOut + lastApfInput - apfAlpha * apfState;
+    apfState = apfOut; lastApfInput = hpfOut;
+
+    // 3. Air Biquad (LC共振)
+    double airOut = b0 * apfOut + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+    x2 = x1; x1 = apfOut;
+    y2 = y1; y1 = airOut;
+
+    // 4. Age LPF (劣化)
+    double lpfOut = airOut * (1.0 - alphaLpf) + alphaLpf * lpfState;
+    lpfState = lpfOut;
+
+    return static_cast<float>(lpfOut);
+}
