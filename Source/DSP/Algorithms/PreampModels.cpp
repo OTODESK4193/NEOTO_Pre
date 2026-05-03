@@ -61,16 +61,20 @@ float Preamp_API::processSample(float input, float driveParam, float charParam, 
     double intOut = drivenSignal * oneMinusAlpha + alpha * integratorState;
     integratorState = intOut;
 
-    // ★ 初期仕様の1次ADAAロジックへ完全ロールバック
-    double x = std::clamp(intOut + bias, -1.0, 1.0);
+    // ★ 修正: ADAAの入力 x に clamp をかけない。
+    // 数学的に連続な区分定義積分 F1_cubic 内でハードクリップを処理することで、積分破壊を解決する。
+    double x = intOut + bias;
+
     double softclipOut = 0.0;
     double dx = x - lastInputADAA;
     const double eps = 1e-8;
 
     if (std::abs(dx) < eps) {
+        // テイラー展開による近似
         softclipOut = ADAA_Math::fx_cubic((x + lastInputADAA) * 0.5);
     }
     else {
+        // 正確な積分差分 (区分定義された F1 により、|x|>1.0 でもエイリアスを抑制)
         softclipOut = (ADAA_Math::F1_cubic(x) - ADAA_Math::F1_cubic(lastInputADAA)) / dx;
     }
 
