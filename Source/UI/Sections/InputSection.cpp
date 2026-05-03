@@ -47,19 +47,15 @@ void InputSection::resized()
 {
     auto area = getLocalBounds().reduced(5, 5);
     area.removeFromTop(30);
-
-    // 上段：Input Gain
-    auto topRow = area.removeFromTop(120);
+    auto topRow = area.removeFromTop(90);
     inputGainLabel.setBounds(topRow.removeFromTop(20));
-    inputGainSlider.setBounds(topRow.reduced(5));
+    inputGainSlider.setBounds(topRow.withSizeKeepingCentre(65, 65));
 
-    // 中段：OS Mode
     auto midRow = area.removeFromTop(60);
     osModeLabel.setBounds(midRow.removeFromTop(20).withSizeKeepingCentre(120, 20));
     osModeCombo.setBounds(midRow.removeFromTop(24).withSizeKeepingCentre(120, 24));
 
-    // 下段：Input Transformer
     auto bottomRow = area;
-    inTransLabel.setBounds(bottomRow.removeFromTop(20).withSizeKeepingCentre(160, 20));
+    inTransLabel.setBounds(bottomRow.removeFromTop(20).withSizeKeepingCentre(140, 20));
     inTransCombo.setBounds(bottomRow.removeFromTop(24).withSizeKeepingCentre(140, 24));
 }

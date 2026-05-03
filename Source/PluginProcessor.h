@@ -7,7 +7,6 @@
 #include <array>
 #include "DSP/Core/AutoLevel.h"
 
-// 新しく作成したポリモーフィズム用のインターフェースとモデル群をインクルード
 #include "DSP/Algorithms/PreampModels.h"
 #include "DSP/Transformers/TransformerModels.h"
 
@@ -57,30 +56,32 @@ public:
     AutoLevelAnalysisResult latestAnalysisResult;
     std::atomic<bool> hasNewAnalysisResult{ false };
 
+    // ==============================================================================
+    // 追加：GUI用 ピークメーター・レベル (dB)
+    // ==============================================================================
+    std::atomic<float> inputPeakDb{ -60.0f };
+    std::atomic<float> outputPeakDb{ -60.0f };
+
 private:
     std::array<std::unique_ptr<juce::dsp::Oversampling<float>>, 3> oversamplers;
     int currentOsMode = -1;
     double currentSampleRate = 44100.0;
     std::array<AutoLevel, 2> autoLevels;
 
-    // ==============================================================================
-    // ポリモーフィズム基盤：全モデルの事前割り当て（Pre-allocated Instances）
-    // ==============================================================================
-    // [チャンネル][モデルインデックス]
+    // ピーク計測用の状態変数 (内部計算用)
+    float inPeakState = 0.0f;
+    float outPeakState = 0.0f;
+
     std::unique_ptr<IInputTransformerEngine> inTransEngines[2][5];
     std::unique_ptr<IPreampEngine> preampEngines[2][6];
     std::unique_ptr<IOutputTransformerEngine> outTransEngines[2][5];
 
-    // ==============================================================================
-    // パラメーター・ポインター
-    // ==============================================================================
     std::atomic<float>* inputGainParam = nullptr;
     std::atomic<float>* outputGainParam = nullptr;
     std::atomic<float>* mixParam = nullptr;
     std::atomic<float>* listenModeParam = nullptr;
     std::atomic<float>* osModeParam = nullptr;
 
-    // 追加: モデル切り替え用コンボボックスのパラメーター
     std::atomic<float>* inTransParam = nullptr;
     std::atomic<float>* preampModelParam = nullptr;
     std::atomic<float>* outTransParam = nullptr;

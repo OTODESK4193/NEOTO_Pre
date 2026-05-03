@@ -1,17 +1,14 @@
 #pragma once
-
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
-
-// 分割した5つのセクションをインクルード
 #include "UI/Sections/InputSection.h"
 #include "UI/Sections/DriveSection.h"
 #include "UI/Sections/TransformerSection.h"
 #include "UI/Sections/OutputSection.h"
-#include "UI/Sections/AnalyzeSection.h"
+#include "UI/Components/VerticalMeter.h"
+#include "UI/Components/AnalyzerScreen.h"
 
-//==============================================================================
-class NeotoPreAudioProcessorEditor : public juce::AudioProcessorEditor
+class NeotoPreAudioProcessorEditor : public juce::AudioProcessorEditor, public juce::Timer
 {
 public:
     NeotoPreAudioProcessorEditor(NeotoPreAudioProcessor&);
@@ -19,16 +16,21 @@ public:
 
     void paint(juce::Graphics&) override;
     void resized() override;
+    void timerCallback() override;
 
 private:
     NeotoPreAudioProcessor& audioProcessor;
 
-    // 独立した5つのUIコンポーネント（子クラス）
-    InputSection inputSection;
-    DriveSection driveSection;
-    TransformerSection transformerSection;
-    OutputSection outputSection;
-    AnalyzeSection analyzeSection;
+    // カスタムUIパーツ
+    VerticalMeter inMeter;
+    VerticalMeter outMeter;
+    AnalyzerScreen analyzer;
+
+    // 各コントロールセクション
+    InputSection inputSec;
+    DriveSection driveSec;
+    TransformerSection transSec;
+    OutputSection outputSec;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(NeotoPreAudioProcessorEditor)
 };

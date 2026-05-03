@@ -47,33 +47,39 @@ target_sources(NEOTO_Pre PRIVATE
     Source/PluginEditor.cpp
     Source/PluginEditor.h
 
-    # DSP Core (安全な先読み・オーバーサンプリング基盤)
+    # DSP Core & Math
     Source/DSP/Core/AutoLevel.cpp
     Source/DSP/Core/AutoLevel.h
-    Source/DSP/Core/Oversampler.cpp
-    Source/DSP/Core/Oversampler.h
-    
+    Source/DSP/Core/ADAA_Math.cpp
+    Source/DSP/Core/ADAA_Math.h
+    Source/DSP/Core/EngineInterfaces.h
 
-    # DSP Transformers (トランスモデリング)
-    Source/DSP/Transformers/SteelTransformer.cpp
-    Source/DSP/Transformers/SteelTransformer.h
-    Source/DSP/Transformers/NickelTransformer.cpp
-    Source/DSP/Transformers/NickelTransformer.h
+    # DSP Algorithms & Transformers
+    Source/DSP/Algorithms/PreampModels.cpp
+    Source/DSP/Algorithms/PreampModels.h
+    Source/DSP/Transformers/TransformerModels.cpp
+    Source/DSP/Transformers/TransformerModels.h
 
-    # DSP Algorithms (サチュレーション・アルゴリズム)
-    Source/DSP/Algorithms/NeveStyleDrive.cpp
-    Source/DSP/Algorithms/NeveStyleDrive.h
-    Source/DSP/Algorithms/ApiStyleDrive.cpp
-    Source/DSP/Algorithms/ApiStyleDrive.h
+    # UI Components (独立したパーツ)
+    Source/UI/Components/VerticalMeter.cpp
+    Source/UI/Components/VerticalMeter.h
+    Source/UI/Components/AnalyzerScreen.cpp
+    Source/UI/Components/AnalyzerScreen.h
 
-    # GUI (リアルタイム描画とUIコンポーネント)
-    
-    
-    
-    
+    # GUI Parts (旧来の共通GUI)
     Source/GUI/ArcDial.cpp
     Source/GUI/ArcDial.h
- "Source/UI/Sections/InputSection.cpp" "Source/UI/Sections/InputSection.h" "Source/DSP/Core/ADAA_Math.h" "Source/DSP/Core/ADAA_Math.cpp" "Source/UI/Sections/DriveSection.h" "Source/UI/Sections/DriveSection.cpp" "Source/UI/Sections/TransformerSection.h" "Source/UI/Sections/TransformerSection.cpp" "Source/UI/Sections/OutputSection.h" "Source/UI/Sections/OutputSection.cpp" "Source/UI/Sections/AnalyzeSection.h" "Source/UI/Sections/AnalyzeSection.cpp" "Source/DSP/Core/EngineInterfaces.h" "Source/DSP/Algorithms/PreampModels.h" "Source/DSP/Algorithms/PreampModels.cpp" "Source/DSP/Transformers/TransformerModels.h" "Source/DSP/Transformers/TransformerModels.cpp")
+
+    # UI Sections (各セクション)
+    Source/UI/Sections/InputSection.cpp
+    Source/UI/Sections/InputSection.h
+    Source/UI/Sections/DriveSection.cpp
+    Source/UI/Sections/DriveSection.h
+    Source/UI/Sections/TransformerSection.cpp
+    Source/UI/Sections/TransformerSection.h
+    Source/UI/Sections/OutputSection.cpp
+    Source/UI/Sections/OutputSection.h
+)
 
 # 6. インクルードパス
 target_include_directories(NEOTO_Pre PRIVATE

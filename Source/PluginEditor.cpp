@@ -1,64 +1,82 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
-//==============================================================================
 NeotoPreAudioProcessorEditor::NeotoPreAudioProcessorEditor(NeotoPreAudioProcessor& p)
-    : AudioProcessorEditor(&p),
-    audioProcessor(p),
-    // 各子コンポーネントのコンストラクタへProcessorの参照を渡す
-    inputSection(p),
-    driveSection(p),
-    transformerSection(p),
-    outputSection(p),
-    analyzeSection(p)
+    : AudioProcessorEditor(&p), audioProcessor(p),
+    inputSec(p), driveSec(p), transSec(p), outputSec(p) // AnalyzeSecは削除
 {
-    // 子コンポーネントをエディターに追加して可視化
-    addAndMakeVisible(inputSection);
-    addAndMakeVisible(driveSection);
-    addAndMakeVisible(transformerSection);
-    addAndMakeVisible(outputSection);
-    addAndMakeVisible(analyzeSection);
+    addAndMakeVisible(inMeter);
+    addAndMakeVisible(outMeter);
+    addAndMakeVisible(analyzer);
 
-    // 5セクションを綺麗に配置するための幅1200px
-    setSize(1200, 480);
+    addAndMakeVisible(inputSec);
+    addAndMakeVisible(driveSec);
+    addAndMakeVisible(transSec);
+    addAndMakeVisible(outputSec);
+
+    // 究極のプロトタイプサイズ: 横980 x 縦650
+    setSize(980, 650);
+
+    // メーター描画用に60FPSで回すタイマー
+    startTimerHz(60);
 }
 
 NeotoPreAudioProcessorEditor::~NeotoPreAudioProcessorEditor()
 {
+    stopTimer();
 }
 
-//==============================================================================
+void NeotoPreAudioProcessorEditor::timerCallback()
+{
+    // DSP側からPeak[dB]を取得し、メーターに渡す
+    inMeter.setLevelDb(audioProcessor.inputPeakDb.load());
+    outMeter.setLevelDb(audioProcessor.outputPeakDb.load());
+}
+
 void NeotoPreAudioProcessorEditor::paint(juce::Graphics& g)
 {
-    // 背景の塗りつぶし（全体のベースカラー）
-    g.fillAll(juce::Colour(0xff1e1e1e));
-
-    // ヘッダー領域の描画 (背景と共通タイトルのみ)
-    auto headerArea = getLocalBounds().removeFromTop(45);
-    g.setColour(juce::Colour(0xff111111));
-    g.fillRect(headerArea);
-    g.setColour(juce::Colours::white);
-    g.setFont(22.0f);
-    g.drawText("NEOTO Pre - Pro Studio", headerArea, juce::Justification::centred, true);
-
-    // ※各セクションの背景パネルやタイトル（"INPUT STAGE"など）は、
-    // それぞれのクラスの paint() メソッド内で自律的に描画されるため、ここには書きません。
+    g.fillAll(juce::Colour(0xff181818)); // ダークで上質な背景色
 }
 
 void NeotoPreAudioProcessorEditor::resized()
 {
-    // ヘッダーを避けて、全体のコンテンツ領域を取得
-    auto contentArea = getLocalBounds().withTrimmedTop(55).reduced(10);
+    auto area = getLocalBounds().reduced(10); // 全体の余白
 
-    // 5等分した幅を計算
-    int sectionWidth = contentArea.getWidth() / 5;
+    // ==============================================================================
+    // 1. 両端のメーター (左右の領域を確保)
+    // ==============================================================================
+    inMeter.setBounds(area.removeFromLeft(30));
 
-    // 左から順番に、各コンポーネントの領域を割り当てる (それぞれに5pxの余白を設ける)
-    inputSection.setBounds(contentArea.removeFromLeft(sectionWidth).reduced(5));
-    driveSection.setBounds(contentArea.removeFromLeft(sectionWidth).reduced(5));
-    transformerSection.setBounds(contentArea.removeFromLeft(sectionWidth).reduced(5));
-    outputSection.setBounds(contentArea.removeFromLeft(sectionWidth).reduced(5));
+    area.removeFromLeft(15); // メーターと中央コンテンツの隙間
 
-    // 残りの領域を最後のAnalyzeSectionへ割り当て
-    analyzeSection.setBounds(contentArea.reduced(5));
+    outMeter.setBounds(area.removeFromRight(30));
+
+    area.removeFromRight(15); // メーターと中央コンテンツの隙間
+
+    // ==============================================================================
+    // 2. 中央ブロックの上下分割 (アナライザー ＆ コントロール群)
+    // ==============================================================================
+    // 上段: アナライザー (高さを220pxに固定)
+    analyzer.setBounds(area.removeFromTop(220));
+
+    area.removeFromTop(15); // 上下段の隙間
+
+    // 下段: 4つのコントロールセクション
+    auto bottomTier = area;
+
+    // 各セクションの横幅定義
+    int standardWidth = 170;
+    int spacing = 10;
+
+    inputSec.setBounds(bottomTier.removeFromLeft(standardWidth));
+    bottomTier.removeFromLeft(spacing);
+
+    driveSec.setBounds(bottomTier.removeFromLeft(standardWidth));
+    bottomTier.removeFromLeft(spacing);
+
+    transSec.setBounds(bottomTier.removeFromLeft(standardWidth));
+    bottomTier.removeFromLeft(spacing);
+
+    // 残りの横幅すべて（約320px）をOutput(Gain Match統合)セクションに割り当て
+    outputSec.setBounds(bottomTier);
 }

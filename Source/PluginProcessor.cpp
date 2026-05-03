@@ -22,7 +22,6 @@ NeotoPreAudioProcessor::NeotoPreAudioProcessor()
     listenModeParam = apvts.getRawParameterValue("listen_mode");
     osModeParam = apvts.getRawParameterValue("os_mode");
 
-    // 追加パラメーターの取得
     inTransParam = apvts.getRawParameterValue("in_trans_type");
     preampModelParam = apvts.getRawParameterValue("preamp_model");
     outTransParam = apvts.getRawParameterValue("out_trans_type");
@@ -35,24 +34,18 @@ NeotoPreAudioProcessor::NeotoPreAudioProcessor()
     ageParam = apvts.getRawParameterValue("age");
     analysisTimeParam = apvts.getRawParameterValue("analysis_time");
 
-    // オーバーサンプリングの初期化
     for (int i = 0; i < 3; ++i) {
         oversamplers[i] = std::make_unique<juce::dsp::Oversampling<float>>(
             2, i, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, true);
     }
 
-    // ==============================================================================
-    // 全モデルのインスタンス生成 (メモリ上に確保)
-    // ==============================================================================
     for (int ch = 0; ch < 2; ++ch) {
-        // Input Transformers
         inTransEngines[ch][0] = std::make_unique<InputTransformer_None>();
         inTransEngines[ch][1] = std::make_unique<InputTransformer_Nickel>();
         inTransEngines[ch][2] = std::make_unique<InputTransformer_Steel>();
         inTransEngines[ch][3] = std::make_unique<InputTransformer_Iron>();
         inTransEngines[ch][4] = std::make_unique<InputTransformer_Amorphous>();
 
-        // Preamps
         preampEngines[ch][0] = std::make_unique<Preamp_API>();
         preampEngines[ch][1] = std::make_unique<Preamp_Neve>();
         preampEngines[ch][2] = std::make_unique<Preamp_Tube>();
@@ -60,7 +53,6 @@ NeotoPreAudioProcessor::NeotoPreAudioProcessor()
         preampEngines[ch][4] = std::make_unique<Preamp_Modern1>();
         preampEngines[ch][5] = std::make_unique<Preamp_Modern2>();
 
-        // Output Transformers
         outTransEngines[ch][0] = std::make_unique<OutputTransformer_None>();
         outTransEngines[ch][1] = std::make_unique<OutputTransformer_Nickel>();
         outTransEngines[ch][2] = std::make_unique<OutputTransformer_Steel>();
@@ -88,9 +80,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout NeotoPreAudioProcessor::crea
         juce::ParameterID{ "os_mode", 1 }, "Oversampling",
         juce::StringArray{ "Off (1x)", "2x", "4x" }, 1));
 
-    // ==============================================================================
-    // 新規追加パラメーター（APVTS登録）※GUIの文字列と完全に一致させます
-    // ==============================================================================
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID{ "in_trans_type", 1 }, "Input Transformer",
         juce::StringArray{ "None", "Nickel", "Steel", "Iron", "Amorphous" }, 1));
@@ -145,7 +134,6 @@ void NeotoPreAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBloc
 
     double oversampledRate = sampleRate * (1 << currentOsMode);
 
-    // 全てのインスタンスの prepare() を呼び出してスタンバイさせる
     for (int ch = 0; ch < 2; ++ch) {
         for (int i = 0; i < 5; ++i) inTransEngines[ch][i]->prepare(oversampledRate);
         for (int i = 0; i < 6; ++i) preampEngines[ch][i]->prepare(oversampledRate);
@@ -158,6 +146,12 @@ void NeotoPreAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBloc
         airSmoother[ch].reset(oversampledRate, 0.02);
         ageSmoother[ch].reset(oversampledRate, 0.02);
     }
+
+    // メーターのリセット
+    inPeakState = 0.0f;
+    outPeakState = 0.0f;
+    inputPeakDb.store(-60.0f);
+    outputPeakDb.store(-60.0f);
 
     int latency = currentOsMode > 0 ? static_cast<int>(oversamplers[currentOsMode]->getLatencyInSamples()) : 0;
     setLatencySamples(latency);
@@ -206,9 +200,6 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
         setLatencySamples(latency);
     }
 
-    // ==============================================================================
-    // [Analyze] トリガーの処理 (Gain Matching)
-    // ==============================================================================
     if (triggerAnalyze.exchange(false))
     {
         int timeSelection = static_cast<int>(analysisTimeParam->load());
@@ -251,7 +242,6 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
     float targetMix = mixParam->load() / 100.0f;
     bool isListenDry = listenModeParam->load() > 0.5f;
 
-    // 現在選ばれているモデルのインデックスを取得
     int currentInTransIdx = static_cast<int>(inTransParam->load());
     int currentPreampIdx = static_cast<int>(preampModelParam->load());
     int currentOutTransIdx = static_cast<int>(outTransParam->load());
@@ -268,19 +258,27 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
         ageSmoother[i].setTargetValue(ageParam->load());
     }
 
+    // メーター用の一時変数 (現在のブロックの最大値を記録)
+    float currentBlockInPeak = 0.0f;
+    float currentBlockOutPeak = 0.0f;
+
     // [Phase 1] Input Gain & Dry Recording
     for (int channel = 0; channel < totalNumInputChannels; ++channel) {
         float* channelData = buffer.getWritePointer(channel);
         float* dryData = dryBuffer.getWritePointer(channel);
         for (int sample = 0; sample < numSamples; ++sample) {
             float s = channelData[sample] * inputGainSmoother[channel].getNextValue();
+
+            // 入力のピーク検出
+            currentBlockInPeak = std::max(currentBlockInPeak, std::abs(s));
+
             autoLevels[channel].pushDrySample(s);
             channelData[sample] = s;
             dryData[sample] = s;
         }
     }
 
-    // [Phase 2 & 3] Oversampling & DSP (Polymorphic Processing)
+    // [Phase 2 & 3] Oversampling & DSP
     juce::dsp::AudioBlock<float> block(buffer);
     juce::dsp::AudioBlock<float> upsampledBlock;
     if (currentOsMode > 0) upsampledBlock = oversamplers[currentOsMode]->processSamplesUp(block);
@@ -292,9 +290,6 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
         for (int sample = 0; sample < numSamplesHigh; ++sample) {
             float s = channelData[sample];
 
-            // ==============================================================================
-            // 切り替えロジック：選ばれたインスタンスの processSample() を叩くだけ！
-            // ==============================================================================
             s = inTransEngines[channel][currentInTransIdx]->processSample(s);
             s = preampEngines[channel][currentPreampIdx]->processSample(s, driveSmoother[channel].getNextValue(), charSmoother[channel].getNextValue(), asymSmoother[channel].getNextValue(), ageSmoother[channel].getNextValue());
             s = outTransEngines[channel][currentOutTransIdx]->processSample(s, colorSmoother[channel].getNextValue(), airSmoother[channel].getNextValue(), ageSmoother[channel].getNextValue());
@@ -322,8 +317,24 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
 
             finalSignal *= outputGainSmoother[channel].getNextValue();
             channelData[sample] = finalSignal;
+
+            // 出力のピーク検出
+            currentBlockOutPeak = std::max(currentBlockOutPeak, std::abs(finalSignal));
         }
     }
+
+    // ==============================================================================
+    // ピークの保持と減衰計算 (エンベロープ・フォロワー)
+    // ==============================================================================
+    // 0.1秒(100ms)で-60dBに減衰する係数を、現在のブロックサイズ分だけ適用
+    float blockDecay = static_cast<float>(std::exp(-1.0 / (0.1 * currentSampleRate) * numSamples));
+
+    inPeakState = std::max(currentBlockInPeak, inPeakState * blockDecay);
+    outPeakState = std::max(currentBlockOutPeak, outPeakState * blockDecay);
+
+    // GUI描画用にdBへ変換して格納
+    inputPeakDb.store(juce::Decibels::gainToDecibels(inPeakState, -60.0f));
+    outputPeakDb.store(juce::Decibels::gainToDecibels(outPeakState, -60.0f));
 }
 
 const juce::String NeotoPreAudioProcessor::getName() const { return JucePlugin_Name; }

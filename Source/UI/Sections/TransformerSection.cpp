@@ -44,25 +44,20 @@ void TransformerSection::resized()
 {
     auto area = getLocalBounds().reduced(5, 5);
     area.removeFromTop(30);
-
-    // 上段：Color & Air
-    auto topRow = area.removeFromTop(120);
+    auto topRow = area.removeFromTop(90);
     auto slot1 = topRow.removeFromLeft(topRow.getWidth() / 2);
     colorLabel.setBounds(slot1.removeFromTop(20));
-    colorSlider.setBounds(slot1.reduced(5));
+    colorSlider.setBounds(slot1.withSizeKeepingCentre(65, 65));
 
     auto slot2 = topRow;
     airLabel.setBounds(slot2.removeFromTop(20));
-    airSlider.setBounds(slot2.reduced(5));
+    airSlider.setBounds(slot2.withSizeKeepingCentre(65, 65));
 
-    // 中段：Age
-    auto midRow = area.removeFromTop(100);
-    auto slot3 = midRow.withSizeKeepingCentre(100, midRow.getHeight());
-    ageLabel.setBounds(slot3.removeFromTop(20));
-    ageSlider.setBounds(slot3.reduced(5));
+    auto midRow = area.removeFromTop(90);
+    ageLabel.setBounds(midRow.removeFromTop(20));
+    ageSlider.setBounds(midRow.withSizeKeepingCentre(65, 65));
 
-    // 下段：Output Transformer
     auto bottomRow = area;
-    outTransLabel.setBounds(bottomRow.removeFromTop(20).withSizeKeepingCentre(160, 20));
+    outTransLabel.setBounds(bottomRow.removeFromTop(20).withSizeKeepingCentre(140, 20));
     outTransCombo.setBounds(bottomRow.removeFromTop(24).withSizeKeepingCentre(140, 24));
 }

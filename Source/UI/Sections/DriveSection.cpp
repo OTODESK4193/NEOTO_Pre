@@ -44,25 +44,20 @@ void DriveSection::resized()
 {
     auto area = getLocalBounds().reduced(5, 5);
     area.removeFromTop(30);
-
-    // 上段：Drive & Character
-    auto topRow = area.removeFromTop(120);
+    auto topRow = area.removeFromTop(90);
     auto slot1 = topRow.removeFromLeft(topRow.getWidth() / 2);
     driveLabel.setBounds(slot1.removeFromTop(20));
-    driveSlider.setBounds(slot1.reduced(5));
+    driveSlider.setBounds(slot1.withSizeKeepingCentre(65, 65));
 
     auto slot2 = topRow;
     charLabel.setBounds(slot2.removeFromTop(20));
-    charSlider.setBounds(slot2.reduced(5));
+    charSlider.setBounds(slot2.withSizeKeepingCentre(65, 65));
 
-    // 中段：Asymmetry
-    auto midRow = area.removeFromTop(100);
-    auto slot3 = midRow.withSizeKeepingCentre(100, midRow.getHeight());
-    asymLabel.setBounds(slot3.removeFromTop(20));
-    asymSlider.setBounds(slot3.reduced(5));
+    auto midRow = area.removeFromTop(90);
+    asymLabel.setBounds(midRow.removeFromTop(20));
+    asymSlider.setBounds(midRow.withSizeKeepingCentre(65, 65));
 
-    // 下段：Preamp Model
     auto bottomRow = area;
-    preampModelLabel.setBounds(bottomRow.removeFromTop(20).withSizeKeepingCentre(160, 20));
+    preampModelLabel.setBounds(bottomRow.removeFromTop(20).withSizeKeepingCentre(140, 20));
     preampModelCombo.setBounds(bottomRow.removeFromTop(24).withSizeKeepingCentre(140, 24));
 }
