@@ -24,13 +24,11 @@ void AnalyzerScreen::drawNextFrameOfSpectrum()
 
     int numReady = fifo.getNumReady();
     if (numReady > 0) {
-        // 最大でも8192サンプルまで読み込む
         numReady = std::min(numReady, 8192);
 
         int start1, block1, start2, block2;
         fifo.prepareToRead(numReady, start1, block1, start2, block2);
 
-        // ★ スライディング・ウィンドウ処理 (古いデータを左にシフトし、新しいデータを右に追加)
         std::copy(circularBuffer.begin() + numReady, circularBuffer.end(), circularBuffer.begin());
 
         int writePos = 8192 - numReady;
@@ -39,9 +37,8 @@ void AnalyzerScreen::drawNextFrameOfSpectrum()
 
         fifo.finishedRead(numReady);
 
-        // FFTの準備
         std::copy(circularBuffer.begin(), circularBuffer.end(), spectrumFftData.begin());
-        std::fill(spectrumFftData.begin() + 8192, spectrumFftData.end(), 0.0f); // ゼロパディング
+        std::fill(spectrumFftData.begin() + 8192, spectrumFftData.end(), 0.0f);
 
         window.multiplyWithWindowingTable(spectrumFftData.data(), 8192);
         fft.performFrequencyOnlyForwardTransform(spectrumFftData.data());
@@ -50,18 +47,16 @@ void AnalyzerScreen::drawNextFrameOfSpectrum()
         spectrumPath.clear();
         bool firstPoint = true;
 
-        for (int i = 1; i < 4096; ++i) { // ナイキスト周波数まで
+        for (int i = 1; i < 4096; ++i) {
             float freq = (i * 44100.0f) / 8192.0f;
             if (freq < 20.0f || freq > 20000.0f) continue;
 
             float mag = spectrumFftData[i];
 
-            // 空間スムージング
             if (i > 1 && i < 4095) {
                 mag = (spectrumFftData[i - 1] + mag * 2.0f + spectrumFftData[i + 1]) * 0.25f;
             }
 
-            // 時間スムージング (液体のような滑らかさ)
             if (mag > smoothedSpectrum[i]) smoothedSpectrum[i] = mag;
             else smoothedSpectrum[i] = smoothedSpectrum[i] * 0.85f + mag * 0.15f;
 
@@ -89,6 +84,7 @@ void AnalyzerScreen::drawNextFrameOfSpectrum()
 
 void AnalyzerScreen::generateEQCurve()
 {
+    // ★ 初期のロジックへロールバック (1.0f のインパルスを入力)
     std::fill(eqFftData.begin(), eqFftData.end(), 0.0f);
     eqFftData[0] = 1.0f;
 
@@ -102,7 +98,7 @@ void AnalyzerScreen::generateEQCurve()
     float air = audioProcessor.apvts.getRawParameterValue("air")->load();
     float age = audioProcessor.apvts.getRawParameterValue("age")->load();
 
-    for (int i = 0; i < 8192; ++i) { // 8192に拡張
+    for (int i = 0; i < 8192; ++i) {
         float s = eqFftData[i];
         if (preIdx == 0) s = virtualPreamp_API.processSample(s, drive, charac, asym, age);
         if (outIdx == 2) s = virtualOut_Steel.processSample(s, color, air, age);
@@ -162,6 +158,7 @@ void AnalyzerScreen::paint(juce::Graphics& g)
     g.setColour(juce::Colours::black.withAlpha(0.5f));
     g.drawRoundedRectangle(bounds.reduced(1.0f), 6.0f, 2.0f);
 
+    // ★ グリッド線の描画
     g.setColour(juce::Colour(0xff1c2a30));
     std::vector<float> freqs = { 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000 };
     for (float freq : freqs) {
@@ -173,12 +170,7 @@ void AnalyzerScreen::paint(juce::Graphics& g)
         g.drawHorizontalLine(static_cast<int>(y), 0.0f, bounds.getWidth());
     }
 
-    g.setColour(juce::Colours::darkgrey);
-    g.setFont(12.0f);
-    g.drawText("100", static_cast<int>(getPositionForFrequency(100, bounds.getWidth())) + 4, static_cast<int>(bounds.getHeight()) - 18, 40, 15, juce::Justification::left);
-    g.drawText("1k", static_cast<int>(getPositionForFrequency(1000, bounds.getWidth())) + 4, static_cast<int>(bounds.getHeight()) - 18, 40, 15, juce::Justification::left);
-    g.drawText("10k", static_cast<int>(getPositionForFrequency(10000, bounds.getWidth())) + 4, static_cast<int>(bounds.getHeight()) - 18, 40, 15, juce::Justification::left);
-
+    // スペクトラム描画
     if (!spectrumPath.isEmpty()) {
         juce::ColourGradient specGrad(juce::Colour(0xffff88a3), 0, 0, juce::Colour(0xffaa88ff), bounds.getWidth(), 0, false);
         specGrad.addColour(0.2f, juce::Colour(0xffffee88));
@@ -193,8 +185,18 @@ void AnalyzerScreen::paint(juce::Graphics& g)
         g.fillRect(bounds);
     }
 
+    // EQカーブ描画
     g.setColour(juce::Colours::white);
     g.strokePath(eqCurvePath, juce::PathStrokeType(2.5f, juce::PathStrokeType::curved));
+
+    // ★ 周波数テキストの描画 (全てのグリッドに連動・グラデーションの背面に隠れないように最前面へ)
+    g.setColour(juce::Colours::lightgrey);
+    g.setFont(10.0f); // 密集するためフォントサイズを微調整
+    std::vector<juce::String> labels = { "20", "50", "100", "200", "500", "1k", "2k", "5k", "10k", "20k" };
+    for (size_t i = 0; i < freqs.size(); ++i) {
+        float x = getPositionForFrequency(freqs[i], bounds.getWidth());
+        g.drawText(labels[i], static_cast<int>(x) + 2, static_cast<int>(bounds.getHeight()) - 16, 30, 12, juce::Justification::left);
+    }
 }
 
 void AnalyzerScreen::resized() {}

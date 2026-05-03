@@ -6,7 +6,6 @@
 #include <atomic>
 #include <array>
 #include "DSP/Core/AutoLevel.h"
-
 #include "DSP/Algorithms/PreampModels.h"
 #include "DSP/Transformers/TransformerModels.h"
 
@@ -57,13 +56,13 @@ public:
     std::atomic<bool> hasNewAnalysisResult{ false };
 
     // ==============================================================================
-    // 追加：GUI用 ピークメーター・レベル (dB)
+    // GUI用 ピークメーター・レベル (dB)
     // ==============================================================================
     std::atomic<float> inputPeakDb{ -60.0f };
     std::atomic<float> outputPeakDb{ -60.0f };
 
     // ==============================================================================
-    // 変更：倍音（THD）表示用 (1st to 7th)
+    // 倍音（THD）表示用 (1st to 7th)
     // ==============================================================================
     std::atomic<float> harmonicLevels[7];
 
@@ -117,7 +116,9 @@ private:
     std::array<juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>, 2> airSmoother;
     std::array<juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>, 2> ageSmoother;
 
-    juce::AudioBuffer<float> dryBuffer;
+    // ★ Dry信号のレイテンシ補正用リングバッファ (動的メモリ確保を避ける設計)
+    std::array<std::vector<float>, 2> dryDelayBuffer;
+    std::array<int, 2> dryDelayWritePos{ 0, 0 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(NeotoPreAudioProcessor)
 };

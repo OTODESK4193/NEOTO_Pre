@@ -78,7 +78,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout NeotoPreAudioProcessor::crea
 
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID{ "os_mode", 1 }, "Oversampling",
-        juce::StringArray{ "Off (1x)", "2x", "4x", "8x" }, 1)); // ★ "8x" を追加
+        juce::StringArray{ "Off (1x)", "2x", "4x", "8x" }, 1));
 
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID{ "in_trans_type", 1 }, "Input Transformer",
@@ -117,7 +117,11 @@ void NeotoPreAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBloc
     currentSampleRate = sampleRate;
     currentOsMode = static_cast<int>(osModeParam->load());
 
-    dryBuffer.setSize(getTotalNumInputChannels(), samplesPerBlock);
+    // ★ 巨大な固定長リングバッファの初期化 (プロセスブロック中の動的確保を完全排除)
+    for (int i = 0; i < 2; ++i) {
+        dryDelayBuffer[i].assign(32768, 0.0f);
+        dryDelayWritePos[i] = 0;
+    }
 
     for (auto& al : autoLevels) al.prepare(sampleRate);
     for (auto& os : oversamplers) os->initProcessing(samplesPerBlock);
@@ -147,7 +151,6 @@ void NeotoPreAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBloc
         ageSmoother[ch].reset(oversampledRate, 0.02);
     }
 
-    // メーターのリセット
     inPeakState = 0.0f;
     outPeakState = 0.0f;
     inputPeakDb.store(-60.0f);
@@ -160,7 +163,6 @@ void NeotoPreAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBloc
 void NeotoPreAudioProcessor::releaseResources()
 {
     for (auto& os : oversamplers) os->reset();
-    dryBuffer.setSize(0, 0);
 }
 
 #ifndef JucePlugin_PreferredChannelConfigurations
@@ -258,23 +260,21 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
         ageSmoother[i].setTargetValue(ageParam->load());
     }
 
-    // メーター用の一時変数 (現在のブロックの最大値を記録)
     float currentBlockInPeak = 0.0f;
     float currentBlockOutPeak = 0.0f;
 
-    // [Phase 1] Input Gain & Dry Recording
+    // [Phase 1] Input Gain & リングバッファへの記録
     for (int channel = 0; channel < totalNumInputChannels; ++channel) {
         float* channelData = buffer.getWritePointer(channel);
-        float* dryData = dryBuffer.getWritePointer(channel);
         for (int sample = 0; sample < numSamples; ++sample) {
             float s = channelData[sample] * inputGainSmoother[channel].getNextValue();
-
-            // 入力のピーク検出
             currentBlockInPeak = std::max(currentBlockInPeak, std::abs(s));
 
-            autoLevels[channel].pushDrySample(s);
+            // ★ Dry信号をリングバッファへ格納
+            dryDelayBuffer[channel][dryDelayWritePos[channel]] = s;
+            dryDelayWritePos[channel] = (dryDelayWritePos[channel] + 1) % 32768;
+
             channelData[sample] = s;
-            dryData[sample] = s;
         }
     }
 
@@ -300,18 +300,39 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
 
     if (currentOsMode > 0) oversamplers[currentOsMode]->processSamplesDown(block);
 
+    // ★ [Delay Compensation 計算] オーバーサンプリング遅延 + 2次ADAA遅延(高サンプルレート基準で1.0サンプル)
+    float osLatency = (currentOsMode > 0) ? oversamplers[currentOsMode]->getLatencyInSamples() : 0.0f;
+    float adaaLatency = 1.0f / (1 << currentOsMode);
+    float totalDelay = osLatency + adaaLatency;
+
     // [Phase 4] Mix, Wet Recording & Output Gain
     for (int channel = 0; channel < totalNumInputChannels; ++channel) {
         float* channelData = buffer.getWritePointer(channel);
-        const float* dryData = dryBuffer.getReadPointer(channel);
+
+        // 当該ブロックの先頭読み取り位置 (書き込み位置からブロックサイズと遅延分を遡る)
+        float readPosBase = static_cast<float>(dryDelayWritePos[channel] - numSamples) - totalDelay;
 
         for (int sample = 0; sample < numSamples; ++sample) {
             float wetSignal = channelData[sample];
-            float drySignal = dryData[sample];
-            float mixRatio = mixSmoother[channel].getNextValue();
 
-            float mixedSignal = drySignal + (wetSignal - drySignal) * mixRatio;
-            float finalSignal = isListenDry ? drySignal : mixedSignal;
+            // ★ 端数遅延補間 (Linear Interpolation)
+            float readPosF = readPosBase + static_cast<float>(sample);
+            while (readPosF < 0.0f) readPosF += 32768.0f;
+            while (readPosF >= 32768.0f) readPosF -= 32768.0f;
+
+            int idx1 = static_cast<int>(readPosF);
+            int idx2 = (idx1 + 1) % 32768;
+            float frac = readPosF - static_cast<float>(idx1);
+
+            // 遅延補正された完全なDry信号
+            float delayedDry = dryDelayBuffer[channel][idx1] * (1.0f - frac) + dryDelayBuffer[channel][idx2] * frac;
+
+            // AutoLevelへ信号を供給 (Dry/Wetのアライメントが保証される)
+            autoLevels[channel].pushDrySample(delayedDry);
+
+            float mixRatio = mixSmoother[channel].getNextValue();
+            float mixedSignal = delayedDry + (wetSignal - delayedDry) * mixRatio;
+            float finalSignal = isListenDry ? delayedDry : mixedSignal;
 
             autoLevels[channel].pushWetSample(mixedSignal);
 
@@ -320,21 +341,17 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
 
             currentBlockOutPeak = std::max(currentBlockOutPeak, std::abs(finalSignal));
 
-            // ★ 追加: Lチャンネル(0)の最終出力をアナライザーに送る
             if (channel == 0) pushNextSampleIntoFifo(finalSignal);
         }
     }
 
     // ==============================================================================
-    // ピークの保持と減衰計算 (エンベロープ・フォロワー)
+    // ピークの保持と減衰計算
     // ==============================================================================
-    // 0.1秒(100ms)で-60dBに減衰する係数を、現在のブロックサイズ分だけ適用
     float blockDecay = static_cast<float>(std::exp(-1.0 / (0.1 * currentSampleRate) * numSamples));
-
     inPeakState = std::max(currentBlockInPeak, inPeakState * blockDecay);
     outPeakState = std::max(currentBlockOutPeak, outPeakState * blockDecay);
 
-    // GUI描画用にdBへ変換して格納
     inputPeakDb.store(juce::Decibels::gainToDecibels(inPeakState, -60.0f));
     outputPeakDb.store(juce::Decibels::gainToDecibels(outPeakState, -60.0f));
 }

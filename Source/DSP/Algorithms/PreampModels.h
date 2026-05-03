@@ -1,10 +1,11 @@
 #pragma once
+
 #include <JuceHeader.h>
 #include "../Core/EngineInterfaces.h"
 #include "../Core/ADAA_Math.h"
 
 //==============================================================================
-// 1. API Style (移行済み)
+// 1. API Style
 //==============================================================================
 class Preamp_API : public IPreampEngine {
 public:
@@ -15,7 +16,7 @@ public:
 private:
     double fs = 44100.0;
     double integratorState = 0.0;
-    double lastInputADAA = 0.0;
+    double lastInputADAA = 0.0; // ★ 初期仕様の1次ADAAステートへロールバック
     double lastSoftclipOut = 0.0;
     double envState = 0.0;
 

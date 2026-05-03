@@ -3,7 +3,7 @@
 #include <algorithm>
 
 //==============================================================================
-// API Style の実装 (旧 ApiStyleDrive.cpp と完全に同一)
+// API Style の実装
 //==============================================================================
 void Preamp_API::prepare(double sampleRate)
 {
@@ -61,6 +61,7 @@ float Preamp_API::processSample(float input, float driveParam, float charParam, 
     double intOut = drivenSignal * oneMinusAlpha + alpha * integratorState;
     integratorState = intOut;
 
+    // ★ 初期仕様の1次ADAAロジックへ完全ロールバック
     double x = std::clamp(intOut + bias, -1.0, 1.0);
     double softclipOut = 0.0;
     double dx = x - lastInputADAA;

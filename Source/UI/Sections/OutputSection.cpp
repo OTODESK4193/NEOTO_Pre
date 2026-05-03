@@ -11,10 +11,9 @@ OutputSection::OutputSection(NeotoPreAudioProcessor& p) : audioProcessor(p)
     outGainSlider.setColour(juce::Slider::rotarySliderFillColourId, juce::Colours::white);
     mixSlider.setColour(juce::Slider::rotarySliderFillColourId, juce::Colours::white);
 
-    // 点灯式トグルボタン化 (四角いボタンが光る仕様)
     listenButton.setClickingTogglesState(true);
-    listenButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff222222)); // Off時: ダークグレー
-    listenButton.setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff00d4ff)); // On時: シアン点灯
+    listenButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff222222));
+    listenButton.setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff00d4ff));
     listenButton.setButtonText("Listen");
     addAndMakeVisible(listenButton);
 
@@ -90,7 +89,7 @@ void OutputSection::timerCallback() {
         suggestResultLabel.setText("Suggest: " + sign + juce::String(res.suggestedGainDb, 1) + " dB", juce::dontSendNotification);
         suggestResultLabel.setColour(juce::Label::textColourId, juce::Colours::lightgreen);
     }
-    repaint(); // ★ 毎フレームTHDバーをアニメーションさせるために追加
+    repaint();
 }
 
 void OutputSection::paint(juce::Graphics& g) {
@@ -101,21 +100,24 @@ void OutputSection::paint(juce::Graphics& g) {
     g.drawText("OUTPUT & MATCHING", getLocalBounds().removeFromTop(30), juce::Justification::centred, false);
 
     // ==============================================================================
-        // ★ 縦型 次数別倍音（THD）バーグラフの描画
-        // ==============================================================================
+    // ★ 縦型 次数別倍音（THD）バーグラフの動的描画
+    // ==============================================================================
     auto bounds = getLocalBounds().reduced(10);
-    auto thdArea = bounds.removeFromBottom(55); // 高さを確保
+
+    // resized() で使われた上部のUI要素高さを計算して避ける (20+95+5+24+5+20 = 169)
+    // マージンを持たせてトップから 170px を除外した残りの全領域をTHDバーに割り当てる
+    auto thdArea = bounds.withTrimmedTop(170);
 
     g.setFont(juce::FontOptions(10.0f));
     int numBars = 7;
     float barWidth = 14.0f;
     float spacing = (thdArea.getWidth() - (numBars * barWidth)) / (numBars - 1);
-    float maxThd = 50.0f; 
+    float maxThd = 50.0f;
 
     for (int i = 0; i < numBars; ++i) {
         float val = audioProcessor.harmonicLevels[i].load();
         float normalized = juce::jlimit(0.0f, 1.0f, val / maxThd);
-        float barHeight = normalized * (thdArea.getHeight() - 16.0f); // テキスト用に下部を空ける
+        float barHeight = normalized * (thdArea.getHeight() - 16.0f);
 
         float x = thdArea.getX() + i * (barWidth + spacing);
         float y = thdArea.getBottom() - 16.0f - barHeight;
@@ -124,12 +126,11 @@ void OutputSection::paint(juce::Graphics& g) {
 
         // 色分け: 基音(白), 偶数(オレンジ), 奇数(シアン)
         if (i == 0) g.setColour(juce::Colours::white);
-        else if (i % 2 != 0) g.setColour(juce::Colour(0xffffaa00)); // 2nd, 4th, 6th (i=1, 3, 5) -> Even
-        else g.setColour(juce::Colour(0xff00d4ff)); // 3rd, 5th, 7th (i=2, 4, 6) -> Odd
+        else if (i % 2 != 0) g.setColour(juce::Colour(0xffffaa00)); // 2nd, 4th, 6th
+        else g.setColour(juce::Colour(0xff00d4ff)); // 3rd, 5th, 7th
 
         g.fillRoundedRectangle(barRect, 2.0f);
 
-        // ラベル描画
         g.setColour(juce::Colours::grey);
         juce::String labelText = (i == 0) ? "1st" : (i == 1) ? "2nd" : (i == 2) ? "3rd" : juce::String(i + 1) + "th";
         g.drawText(labelText, x - 5.0f, thdArea.getBottom() - 14.0f, barWidth + 10.0f, 14.0f, juce::Justification::centredTop);
@@ -140,32 +141,42 @@ void OutputSection::resized() {
     auto area = getLocalBounds().reduced(10);
     area.removeFromTop(20);
 
-    // 上段：左側にGainとMix、その横にListenボタン
-    auto knobRow = area.removeFromTop(110);
-    auto slot1 = knobRow.removeFromLeft(90);
-    outGainLabel.setBounds(slot1.removeFromTop(20));
-    outGainSlider.setBounds(slot1.withSizeKeepingCentre(85, 85)); // 巨大化
+    // ★ Row 1: 左側にGainとMix、右側に3行のボタン
+    auto topBlock = area.removeFromTop(95);
 
-    auto slot2 = knobRow.removeFromLeft(90);
-    mixLabel.setBounds(slot2.removeFromTop(20));
-    mixSlider.setBounds(slot2.withSizeKeepingCentre(85, 85)); // 巨大化
+    auto outGainArea = topBlock.removeFromLeft(85);
+    outGainLabel.setBounds(outGainArea.removeFromTop(20));
+    outGainSlider.setBounds(outGainArea.withSizeKeepingCentre(75, 75));
 
-    auto slot3 = knobRow.removeFromLeft(100);
-    listenButton.setBounds(slot3.withSizeKeepingCentre(80, 28).translated(0, 10)); // トグルボタンとして配置
+    auto mixArea = topBlock.removeFromLeft(85);
+    mixLabel.setBounds(mixArea.removeFromTop(20));
+    mixSlider.setBounds(mixArea.withSizeKeepingCentre(75, 75));
 
-    area.removeFromTop(10);
+    // ボタンの幅をAnalyze(90px)に統一し、3行に配置
+    auto btnArea = topBlock.removeFromLeft(100).withTrimmedLeft(10);
+    int btnHeight = 26;
+    int btnSpacing = 8;
+    listenButton.setBounds(btnArea.removeFromTop(btnHeight).withWidth(90));
+    btnArea.removeFromTop(btnSpacing);
+    analyzeButton.setBounds(btnArea.removeFromTop(btnHeight).withWidth(90));
+    btnArea.removeFromTop(btnSpacing);
+    applyButton.setBounds(btnArea.removeFromTop(btnHeight).withWidth(90));
 
-    // 中段以降のGain Matching
-    auto timeRow = area.removeFromTop(30);
+    area.removeFromTop(5);
+
+    // ★ Row 2: コンボボックス
+    auto timeRow = area.removeFromTop(24);
     timeComboLabel.setBounds(timeRow.removeFromLeft(90));
-    timeCombo.setBounds(timeRow.removeFromLeft(90).reduced(0, 3));
-    analyzeButton.setBounds(timeRow.reduced(10, 2));
+    timeCombo.setBounds(timeRow.removeFromLeft(100).reduced(0, 2));
 
-    auto resultRow = area.removeFromTop(70);
-    auto labelsBox = resultRow.removeFromLeft(resultRow.getWidth() / 2);
-    dryResultLabel.setBounds(labelsBox.removeFromTop(20));
-    wetResultLabel.setBounds(labelsBox.removeFromTop(20));
-    suggestResultLabel.setBounds(labelsBox.removeFromTop(25));
+    area.removeFromTop(5);
 
-    applyButton.setBounds(resultRow.withSizeKeepingCentre(100, 30));
+    // ★ Row 3: 結果ラベルを1行に配置
+    auto labelRow = area.removeFromTop(20);
+    int labelWidth = labelRow.getWidth() / 3;
+    dryResultLabel.setBounds(labelRow.removeFromLeft(labelWidth));
+    wetResultLabel.setBounds(labelRow.removeFromLeft(labelWidth));
+    suggestResultLabel.setBounds(labelRow.removeFromLeft(labelWidth));
+
+    // 残りの広大なエリアが paint() にて THD 倍音バーグラフとして使用されます
 }
