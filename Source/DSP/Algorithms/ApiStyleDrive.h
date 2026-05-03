@@ -1,5 +1,6 @@
 #pragma once
 #include <JuceHeader.h>
+// ADAAの数学関数をクラス内から削除し、外部ライブラリを参照する準備をします。
 
 class ApiStyleDrive
 {
@@ -11,20 +12,14 @@ public:
     float processSample(float input, float driveParam, float charParam, float asymParam, float ageParam);
 
 private:
-    double fx(double x) const;
-    double F1(double x) const;
-
     double fs = 44100.0;
 
-    // ADAA & 積分器の状態変数
     double integratorState = 0.0;
     double lastInputADAA = 0.0;
     double lastSoftclipOut = 0.0;
 
-    // Age (Sag) 用のエンベロープフォロワー状態変数
     double envState = 0.0;
 
-    // キャッシュ変数
     float lastDriveParam = -1.0f;
     float lastCharParam = -1.0f;
     float lastAsymParam = -1.0f;
@@ -37,7 +32,6 @@ private:
     double bias = 0.0;
     double fxBias = 0.0;
 
-    // Sag制御用係数
     double envAttackCoef = 0.0;
     double envReleaseCoef = 0.0;
     double sagRatio = 0.0;

@@ -1,9 +1,11 @@
-#include "ApiStyleDrive.h"
-#include "../Core/ADAA_Math.h" // 新規作成したライブラリをインクルード
+#include "PreampModels.h"
 #include <cmath>
 #include <algorithm>
 
-void ApiStyleDrive::prepare(double sampleRate)
+//==============================================================================
+// API Style の実装 (旧 ApiStyleDrive.cpp と完全に同一)
+//==============================================================================
+void Preamp_API::prepare(double sampleRate)
 {
     fs = sampleRate;
     integratorState = 0.0;
@@ -20,7 +22,7 @@ void ApiStyleDrive::prepare(double sampleRate)
     lastAgeParam = -1.0f;
 }
 
-float ApiStyleDrive::processSample(float input, float driveParam, float charParam, float asymParam, float ageParam)
+float Preamp_API::processSample(float input, float driveParam, float charParam, float asymParam, float ageParam)
 {
     if (driveParam != lastDriveParam) {
         double driveDb = (static_cast<double>(driveParam) / 100.0) * 24.0;
@@ -38,7 +40,7 @@ float ApiStyleDrive::processSample(float input, float driveParam, float charPara
 
     if (asymParam != lastAsymParam) {
         bias = juce::jmap(static_cast<double>(asymParam), 0.0, 100.0, 0.0, 0.4);
-        fxBias = ADAA_Math::fx_cubic(bias); // 共通ライブラリを呼び出し
+        fxBias = ADAA_Math::fx_cubic(bias);
         lastAsymParam = asymParam;
     }
 
@@ -48,8 +50,8 @@ float ApiStyleDrive::processSample(float input, float driveParam, float charPara
     }
 
     double drivenSignal = static_cast<double>(input) * gain;
-
     double absIn = std::abs(drivenSignal);
+
     if (absIn > envState) envState = envAttackCoef * envState + (1.0 - envAttackCoef) * absIn;
     else envState = envReleaseCoef * envState + (1.0 - envReleaseCoef) * absIn;
 
@@ -65,11 +67,9 @@ float ApiStyleDrive::processSample(float input, float driveParam, float charPara
     const double eps = 1e-8;
 
     if (std::abs(dx) < eps) {
-        // 共通ライブラリを呼び出し
         softclipOut = ADAA_Math::fx_cubic((x + lastInputADAA) * 0.5);
     }
     else {
-        // 共通ライブラリを呼び出し
         softclipOut = (ADAA_Math::F1_cubic(x) - ADAA_Math::F1_cubic(lastInputADAA)) / dx;
     }
 

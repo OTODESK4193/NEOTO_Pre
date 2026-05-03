@@ -21,6 +21,12 @@ NeotoPreAudioProcessor::NeotoPreAudioProcessor()
     mixParam = apvts.getRawParameterValue("mix");
     listenModeParam = apvts.getRawParameterValue("listen_mode");
     osModeParam = apvts.getRawParameterValue("os_mode");
+
+    // 追加パラメーターの取得
+    inTransParam = apvts.getRawParameterValue("in_trans_type");
+    preampModelParam = apvts.getRawParameterValue("preamp_model");
+    outTransParam = apvts.getRawParameterValue("out_trans_type");
+
     driveParam = apvts.getRawParameterValue("drive");
     colorParam = apvts.getRawParameterValue("color");
     charParam = apvts.getRawParameterValue("character");
@@ -29,9 +35,37 @@ NeotoPreAudioProcessor::NeotoPreAudioProcessor()
     ageParam = apvts.getRawParameterValue("age");
     analysisTimeParam = apvts.getRawParameterValue("analysis_time");
 
+    // オーバーサンプリングの初期化
     for (int i = 0; i < 3; ++i) {
         oversamplers[i] = std::make_unique<juce::dsp::Oversampling<float>>(
             2, i, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, true);
+    }
+
+    // ==============================================================================
+    // 全モデルのインスタンス生成 (メモリ上に確保)
+    // ==============================================================================
+    for (int ch = 0; ch < 2; ++ch) {
+        // Input Transformers
+        inTransEngines[ch][0] = std::make_unique<InputTransformer_None>();
+        inTransEngines[ch][1] = std::make_unique<InputTransformer_Nickel>();
+        inTransEngines[ch][2] = std::make_unique<InputTransformer_Steel>();
+        inTransEngines[ch][3] = std::make_unique<InputTransformer_Iron>();
+        inTransEngines[ch][4] = std::make_unique<InputTransformer_Amorphous>();
+
+        // Preamps
+        preampEngines[ch][0] = std::make_unique<Preamp_API>();
+        preampEngines[ch][1] = std::make_unique<Preamp_Neve>();
+        preampEngines[ch][2] = std::make_unique<Preamp_Tube>();
+        preampEngines[ch][3] = std::make_unique<Preamp_SSL>();
+        preampEngines[ch][4] = std::make_unique<Preamp_Modern1>();
+        preampEngines[ch][5] = std::make_unique<Preamp_Modern2>();
+
+        // Output Transformers
+        outTransEngines[ch][0] = std::make_unique<OutputTransformer_None>();
+        outTransEngines[ch][1] = std::make_unique<OutputTransformer_Nickel>();
+        outTransEngines[ch][2] = std::make_unique<OutputTransformer_Steel>();
+        outTransEngines[ch][3] = std::make_unique<OutputTransformer_Iron>();
+        outTransEngines[ch][4] = std::make_unique<OutputTransformer_Amorphous>();
     }
 }
 
@@ -53,6 +87,21 @@ juce::AudioProcessorValueTreeState::ParameterLayout NeotoPreAudioProcessor::crea
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID{ "os_mode", 1 }, "Oversampling",
         juce::StringArray{ "Off (1x)", "2x", "4x" }, 1));
+
+    // ==============================================================================
+    // 新規追加パラメーター（APVTS登録）※GUIの文字列と完全に一致させます
+    // ==============================================================================
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID{ "in_trans_type", 1 }, "Input Transformer",
+        juce::StringArray{ "None", "Nickel", "Steel", "Iron", "Amorphous" }, 1));
+
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID{ "preamp_model", 1 }, "Preamp Model",
+        juce::StringArray{ "API Style", "Neve Style", "Vintage Tube", "SSL Modern", "Modern 1", "Modern 2" }, 0));
+
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID{ "out_trans_type", 1 }, "Output Transformer",
+        juce::StringArray{ "None", "Nickel", "Steel", "Iron", "Amorphous" }, 1));
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ "drive", 1 }, "Drive", 0.0f, 100.0f, 0.0f));
@@ -95,17 +144,19 @@ void NeotoPreAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBloc
     }
 
     double oversampledRate = sampleRate * (1 << currentOsMode);
-    for (int i = 0; i < 2; ++i) {
-        inputTransformers[i].prepare(oversampledRate);
-        apiDrives[i].prepare(oversampledRate);
-        outputTransformers[i].prepare(oversampledRate);
 
-        driveSmoother[i].reset(oversampledRate, 0.02);
-        colorSmoother[i].reset(oversampledRate, 0.02);
-        charSmoother[i].reset(oversampledRate, 0.02);
-        asymSmoother[i].reset(oversampledRate, 0.02);
-        airSmoother[i].reset(oversampledRate, 0.02);
-        ageSmoother[i].reset(oversampledRate, 0.02);
+    // 全てのインスタンスの prepare() を呼び出してスタンバイさせる
+    for (int ch = 0; ch < 2; ++ch) {
+        for (int i = 0; i < 5; ++i) inTransEngines[ch][i]->prepare(oversampledRate);
+        for (int i = 0; i < 6; ++i) preampEngines[ch][i]->prepare(oversampledRate);
+        for (int i = 0; i < 5; ++i) outTransEngines[ch][i]->prepare(oversampledRate);
+
+        driveSmoother[ch].reset(oversampledRate, 0.02);
+        colorSmoother[ch].reset(oversampledRate, 0.02);
+        charSmoother[ch].reset(oversampledRate, 0.02);
+        asymSmoother[ch].reset(oversampledRate, 0.02);
+        airSmoother[ch].reset(oversampledRate, 0.02);
+        ageSmoother[ch].reset(oversampledRate, 0.02);
     }
 
     int latency = currentOsMode > 0 ? static_cast<int>(oversamplers[currentOsMode]->getLatencyInSamples()) : 0;
@@ -143,20 +194,20 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
     {
         currentOsMode = newOsMode;
         double newRate = currentSampleRate * (1 << currentOsMode);
-        for (int i = 0; i < 2; ++i) {
-            inputTransformers[i].prepare(newRate);
-            apiDrives[i].prepare(newRate);
-            outputTransformers[i].prepare(newRate);
-            driveSmoother[i].reset(newRate, 0.02); colorSmoother[i].reset(newRate, 0.02);
-            charSmoother[i].reset(newRate, 0.02); asymSmoother[i].reset(newRate, 0.02);
-            airSmoother[i].reset(newRate, 0.02); ageSmoother[i].reset(newRate, 0.02);
+        for (int ch = 0; ch < 2; ++ch) {
+            for (int i = 0; i < 5; ++i) inTransEngines[ch][i]->prepare(newRate);
+            for (int i = 0; i < 6; ++i) preampEngines[ch][i]->prepare(newRate);
+            for (int i = 0; i < 5; ++i) outTransEngines[ch][i]->prepare(newRate);
+            driveSmoother[ch].reset(newRate, 0.02); colorSmoother[ch].reset(newRate, 0.02);
+            charSmoother[ch].reset(newRate, 0.02); asymSmoother[ch].reset(newRate, 0.02);
+            airSmoother[ch].reset(newRate, 0.02); ageSmoother[ch].reset(newRate, 0.02);
         }
         int latency = currentOsMode > 0 ? static_cast<int>(oversamplers[currentOsMode]->getLatencyInSamples()) : 0;
         setLatencySamples(latency);
     }
 
     // ==============================================================================
-    // [Analyze] トリガーの処理 (Gain Matching 計算)
+    // [Analyze] トリガーの処理 (Gain Matching)
     // ==============================================================================
     if (triggerAnalyze.exchange(false))
     {
@@ -165,25 +216,28 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
 
         for (int ch = 0; ch < totalNumInputChannels; ++ch) autoLevels[ch].analyzeRMS(seconds);
 
-        latestAnalysisResult.dryRmsL = autoLevels[0].getLatestDryRMS();
-        latestAnalysisResult.wetRmsL = autoLevels[0].getLatestWetRMS();
-        if (totalNumInputChannels > 1) {
-            latestAnalysisResult.dryRmsR = autoLevels[1].getLatestDryRMS();
-            latestAnalysisResult.wetRmsR = autoLevels[1].getLatestWetRMS();
-        }
-        else {
-            latestAnalysisResult.dryRmsR = latestAnalysisResult.dryRmsL;
-            latestAnalysisResult.wetRmsR = latestAnalysisResult.wetRmsL;
-        }
+        float dryEnergyL = autoLevels[0].getLatestDryRMS();
+        float wetEnergyL = autoLevels[0].getLatestWetRMS();
+        float dryEnergyR = totalNumInputChannels > 1 ? autoLevels[1].getLatestDryRMS() : dryEnergyL;
+        float wetEnergyR = totalNumInputChannels > 1 ? autoLevels[1].getLatestWetRMS() : wetEnergyL;
 
-        // ゲインマッチングの算出 (Output = Wet + OutputGain。 Dry = Output となる OutputGain を求める)
-        float maxDryRms = std::max(latestAnalysisResult.dryRmsL, latestAnalysisResult.dryRmsR);
-        float maxWetRms = std::max(latestAnalysisResult.wetRmsL, latestAnalysisResult.wetRmsR);
+        float totalDryEnergy = dryEnergyL + dryEnergyR;
+        float totalWetEnergy = wetEnergyL + wetEnergyR;
 
-        if (maxWetRms > 0.0001f && maxDryRms > 0.0001f) {
-            float dryDb = juce::Decibels::gainToDecibels(maxDryRms);
-            float wetDb = juce::Decibels::gainToDecibels(maxWetRms);
-            latestAnalysisResult.suggestedGainDb = dryDb - wetDb; // 完璧なゲインマッチング
+        const float lufsOffset = -0.691f;
+        float dryLufs = -100.0f;
+        float wetLufs = -100.0f;
+
+        if (totalDryEnergy > 1e-10f) dryLufs = 10.0f * std::log10(totalDryEnergy) + lufsOffset;
+        if (totalWetEnergy > 1e-10f) wetLufs = 10.0f * std::log10(totalWetEnergy) + lufsOffset;
+
+        latestAnalysisResult.dryRmsL = dryLufs;
+        latestAnalysisResult.wetRmsL = wetLufs;
+        latestAnalysisResult.dryRmsR = 0.0f;
+        latestAnalysisResult.wetRmsR = 0.0f;
+
+        if (totalWetEnergy > 1e-10f && totalDryEnergy > 1e-10f) {
+            latestAnalysisResult.suggestedGainDb = dryLufs - wetLufs;
         }
         else {
             latestAnalysisResult.suggestedGainDb = 0.0f;
@@ -196,6 +250,11 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
     float targetOutGain = juce::Decibels::decibelsToGain(outputGainParam->load());
     float targetMix = mixParam->load() / 100.0f;
     bool isListenDry = listenModeParam->load() > 0.5f;
+
+    // 現在選ばれているモデルのインデックスを取得
+    int currentInTransIdx = static_cast<int>(inTransParam->load());
+    int currentPreampIdx = static_cast<int>(preampModelParam->load());
+    int currentOutTransIdx = static_cast<int>(outTransParam->load());
 
     for (int i = 0; i < 2; ++i) {
         inputGainSmoother[i].setTargetValue(targetInGain);
@@ -221,7 +280,7 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
         }
     }
 
-    // [Phase 2 & 3] Oversampling & DSP
+    // [Phase 2 & 3] Oversampling & DSP (Polymorphic Processing)
     juce::dsp::AudioBlock<float> block(buffer);
     juce::dsp::AudioBlock<float> upsampledBlock;
     if (currentOsMode > 0) upsampledBlock = oversamplers[currentOsMode]->processSamplesUp(block);
@@ -232,9 +291,14 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
         float* channelData = upsampledBlock.getChannelPointer(channel);
         for (int sample = 0; sample < numSamplesHigh; ++sample) {
             float s = channelData[sample];
-            s = inputTransformers[channel].processSample(s);
-            s = apiDrives[channel].processSample(s, driveSmoother[channel].getNextValue(), charSmoother[channel].getNextValue(), asymSmoother[channel].getNextValue(), ageSmoother[channel].getNextValue());
-            s = outputTransformers[channel].processSample(s, colorSmoother[channel].getNextValue(), airSmoother[channel].getNextValue(), ageSmoother[channel].getNextValue());
+
+            // ==============================================================================
+            // 切り替えロジック：選ばれたインスタンスの processSample() を叩くだけ！
+            // ==============================================================================
+            s = inTransEngines[channel][currentInTransIdx]->processSample(s);
+            s = preampEngines[channel][currentPreampIdx]->processSample(s, driveSmoother[channel].getNextValue(), charSmoother[channel].getNextValue(), asymSmoother[channel].getNextValue(), ageSmoother[channel].getNextValue());
+            s = outTransEngines[channel][currentOutTransIdx]->processSample(s, colorSmoother[channel].getNextValue(), airSmoother[channel].getNextValue(), ageSmoother[channel].getNextValue());
+
             channelData[sample] = s;
         }
     }
@@ -254,10 +318,8 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
             float mixedSignal = drySignal + (wetSignal - drySignal) * mixRatio;
             float finalSignal = isListenDry ? drySignal : mixedSignal;
 
-            // AutoLevel適用前のWet状態を記録
             autoLevels[channel].pushWetSample(mixedSignal);
 
-            // Output Gain適用 (AutoLevelクラスへの依存を完全排除)
             finalSignal *= outputGainSmoother[channel].getNextValue();
             channelData[sample] = finalSignal;
         }

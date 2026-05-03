@@ -1,22 +1,18 @@
 #pragma once
 #include <JuceHeader.h>
+// クラス内部の数学関数宣言を削除
 
 class NickelTransformer
 {
 public:
     NickelTransformer() = default;
     ~NickelTransformer() = default;
-
     void prepare(double sampleRate);
     float processSample(float input);
 
 private:
-    // ハードクリッピング（tanh近似等）と1次ADAA用の関数
-    float fx(float x) const;
-    float F1(float x) const;
-
     double fs = 44100.0;
-    float lastInputADAA = 0.0f;
+    double lastInputADAA = 0.0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(NickelTransformer)
 };

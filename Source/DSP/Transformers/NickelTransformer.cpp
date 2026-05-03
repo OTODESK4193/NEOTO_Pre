@@ -1,49 +1,30 @@
 #include "NickelTransformer.h"
+#include "../Core/ADAA_Math.h" // 新規作成したライブラリをインクルード
 #include <cmath>
 #include <algorithm>
 
 void NickelTransformer::prepare(double sampleRate)
 {
     fs = sampleRate;
-    lastInputADAA = 0.0f;
-}
-
-float NickelTransformer::fx(float x) const
-{
-    // 入力トランスのハードクリッピング（閾値が高く、超えると急激に潰れる）[cite: 5]
-    // 簡易的な多項式ハードクリッパー（閾値 x = 1.5）
-    if (x > 1.5f) return 1.5f;
-    if (x < -1.5f) return -1.5f;
-    return x;
-}
-
-float NickelTransformer::F1(float x) const
-{
-    // 上記ハードクリッパーの第1次不定積分
-    if (x > 1.5f) return 1.5f * x - 1.125f; // (1.5 * 1.5)/2
-    if (x < -1.5f) return -1.5f * x - 1.125f;
-    return 0.5f * x * x;
+    lastInputADAA = 0.0;
 }
 
 float NickelTransformer::processSample(float input)
 {
-    // 通常のマイクレベルではリニア動作、過大入力時のみクリップする[cite: 5]
-    float softclipOut = 0.0f;
-    float dx = input - lastInputADAA;
-    const float eps = 1e-5f;
+    double dInput = static_cast<double>(input);
+    double softclipOut = 0.0;
+    double dx = dInput - lastInputADAA;
+    const double eps = 1e-8;
 
-    if (std::abs(dx) < eps)
-    {
-        // イルコンディション回避
-        float x_mid = (input + lastInputADAA) * 0.5f;
-        softclipOut = fx(x_mid);
+    if (std::abs(dx) < eps) {
+        // 共通ライブラリを呼び出し
+        softclipOut = ADAA_Math::fx_hardclip((dInput + lastInputADAA) * 0.5);
     }
-    else
-    {
-        // 1次ADAAによるエイリアシング除去[cite: 6]
-        softclipOut = (F1(input) - F1(lastInputADAA)) / dx;
+    else {
+        // 共通ライブラリを呼び出し
+        softclipOut = (ADAA_Math::F1_hardclip(dInput) - ADAA_Math::F1_hardclip(lastInputADAA)) / dx;
     }
-    lastInputADAA = input;
+    lastInputADAA = dInput;
 
-    return softclipOut;
+    return static_cast<float>(softclipOut);
 }

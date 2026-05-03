@@ -6,9 +6,10 @@
 #include <atomic>
 #include <array>
 #include "DSP/Core/AutoLevel.h"
-#include "DSP/Algorithms/ApiStyleDrive.h"
-#include "DSP/Transformers/SteelTransformer.h"
-#include "DSP/Transformers/NickelTransformer.h"
+
+// 新しく作成したポリモーフィズム用のインターフェースとモデル群をインクルード
+#include "DSP/Algorithms/PreampModels.h"
+#include "DSP/Transformers/TransformerModels.h"
 
 struct AutoLevelAnalysisResult {
     float dryRmsL = 0.0f; float dryRmsR = 0.0f;
@@ -52,10 +53,7 @@ public:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     juce::AudioProcessorValueTreeState apvts;
 
-    // UIからのトリガー
     std::atomic<bool> triggerAnalyze{ false };
-
-    // GUIへ結果を返すための変数
     AutoLevelAnalysisResult latestAnalysisResult;
     std::atomic<bool> hasNewAnalysisResult{ false };
 
@@ -63,17 +61,30 @@ private:
     std::array<std::unique_ptr<juce::dsp::Oversampling<float>>, 3> oversamplers;
     int currentOsMode = -1;
     double currentSampleRate = 44100.0;
-
     std::array<AutoLevel, 2> autoLevels;
-    std::array<NickelTransformer, 2> inputTransformers;
-    std::array<ApiStyleDrive, 2> apiDrives;
-    std::array<SteelTransformer, 2> outputTransformers;
 
+    // ==============================================================================
+    // ポリモーフィズム基盤：全モデルの事前割り当て（Pre-allocated Instances）
+    // ==============================================================================
+    // [チャンネル][モデルインデックス]
+    std::unique_ptr<IInputTransformerEngine> inTransEngines[2][5];
+    std::unique_ptr<IPreampEngine> preampEngines[2][6];
+    std::unique_ptr<IOutputTransformerEngine> outTransEngines[2][5];
+
+    // ==============================================================================
+    // パラメーター・ポインター
+    // ==============================================================================
     std::atomic<float>* inputGainParam = nullptr;
     std::atomic<float>* outputGainParam = nullptr;
     std::atomic<float>* mixParam = nullptr;
     std::atomic<float>* listenModeParam = nullptr;
     std::atomic<float>* osModeParam = nullptr;
+
+    // 追加: モデル切り替え用コンボボックスのパラメーター
+    std::atomic<float>* inTransParam = nullptr;
+    std::atomic<float>* preampModelParam = nullptr;
+    std::atomic<float>* outTransParam = nullptr;
+
     std::atomic<float>* driveParam = nullptr;
     std::atomic<float>* colorParam = nullptr;
     std::atomic<float>* charParam = nullptr;

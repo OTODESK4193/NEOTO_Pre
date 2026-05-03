@@ -52,7 +52,7 @@ target_sources(NEOTO_Pre PRIVATE
     Source/DSP/Core/AutoLevel.h
     Source/DSP/Core/Oversampler.cpp
     Source/DSP/Core/Oversampler.h
-    Source/DSP/Core/ADAA_Functions.h
+    
 
     # DSP Transformers (トランスモデリング)
     Source/DSP/Transformers/SteelTransformer.cpp
@@ -67,13 +67,13 @@ target_sources(NEOTO_Pre PRIVATE
     Source/DSP/Algorithms/ApiStyleDrive.h
 
     # GUI (リアルタイム描画とUIコンポーネント)
-    Source/GUI/MainComponent.cpp
-    Source/GUI/MainComponent.h
-    Source/GUI/OpenGLVisualizer.cpp
-    Source/GUI/OpenGLVisualizer.h
+    
+    
+    
+    
     Source/GUI/ArcDial.cpp
     Source/GUI/ArcDial.h
-)
+ "Source/UI/Sections/InputSection.cpp" "Source/UI/Sections/InputSection.h" "Source/DSP/Core/ADAA_Math.h" "Source/DSP/Core/ADAA_Math.cpp" "Source/UI/Sections/DriveSection.h" "Source/UI/Sections/DriveSection.cpp" "Source/UI/Sections/TransformerSection.h" "Source/UI/Sections/TransformerSection.cpp" "Source/UI/Sections/OutputSection.h" "Source/UI/Sections/OutputSection.cpp" "Source/UI/Sections/AnalyzeSection.h" "Source/UI/Sections/AnalyzeSection.cpp" "Source/DSP/Core/EngineInterfaces.h" "Source/DSP/Algorithms/PreampModels.h" "Source/DSP/Algorithms/PreampModels.cpp" "Source/DSP/Transformers/TransformerModels.h" "Source/DSP/Transformers/TransformerModels.cpp")
 
 # 6. インクルードパス
 target_include_directories(NEOTO_Pre PRIVATE
