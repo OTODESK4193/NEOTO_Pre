@@ -45,10 +45,29 @@ public:
 class OutputTransformer_Steel : public IOutputTransformerEngine {
 public:
     void prepare(double sampleRate) override;
-    float processSample(float input, float color, float air, float age) override;
+    float processSample(float input, float colorParam, float airParam, float ageParam) override;
 private:
     double fs = 44100.0;
-    // TODO: 後ほど既存のSteelTransformerのメンバ変数をここにコピペします
+
+    // SteelTransformerから完全移植したフィルタ状態変数
+    double hpfState = 0.0;
+    double lastInput = 0.0;
+    double apfState = 0.0;
+    double lastApfInput = 0.0;
+    double lpfState = 0.0;
+
+    // Biquad (Air EQ) 状態変数
+    double x1 = 0.0, x2 = 0.0, y1 = 0.0, y2 = 0.0;
+    double b0 = 1.0, b1 = 0.0, b2 = 0.0, a1 = 0.0, a2 = 0.0;
+
+    // キャッシュ変数
+    float lastColorParam = -1.0f;
+    float lastAirParam = -1.0f;
+    float lastAgeParam = -1.0f;
+
+    double alphaHpf = 0.0;
+    double apfAlpha = 0.0;
+    double alphaLpf = 0.0;
 };
 
 // 以降はプロトタイプ空箱
