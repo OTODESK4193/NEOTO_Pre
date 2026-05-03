@@ -1,26 +1,37 @@
 #pragma once
 #include <JuceHeader.h>
 #include "../../PluginProcessor.h"
+#include "../../GUI/ArcDial.h" // 追加
 
 class TransformerSection : public juce::Component
 {
 public:
     TransformerSection(NeotoPreAudioProcessor& p);
+    ~TransformerSection() override; // デストラクタの宣言を追加！
+
     void paint(juce::Graphics& g) override;
     void resized() override;
 
 private:
     NeotoPreAudioProcessor& audioProcessor;
-
-    juce::Slider colorSlider, airSlider, ageSlider;
-    juce::Label colorLabel, airLabel, ageLabel;
-
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> colorAttach, airAttach, ageAttach;
-    juce::ComboBox outTransCombo;
-    juce::Label outTransLabel;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> outTransAttach;
+    ArcDialLookAndFeel arcLnF; // スキンを追加
 
     void setupRotarySlider(juce::Slider& slider, juce::Label& label, const juce::String& name);
+
+    juce::Slider colorSlider;
+    juce::Label colorLabel;
+    juce::Slider airSlider;
+    juce::Label airLabel;
+    juce::Slider ageSlider;
+    juce::Label ageLabel;
+
+    juce::ComboBox outTransCombo;
+    juce::Label outTransLabel;
+
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> colorAttach;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> airAttach;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> ageAttach;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> outTransAttach;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TransformerSection)
 };

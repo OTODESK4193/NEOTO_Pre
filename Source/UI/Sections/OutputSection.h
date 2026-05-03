@@ -1,6 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
 #include "../../PluginProcessor.h"
+#include "../../GUI/ArcDial.h" // 追加
 
 class OutputSection : public juce::Component, public juce::Timer
 {
@@ -14,6 +15,7 @@ public:
 
 private:
     NeotoPreAudioProcessor& audioProcessor;
+    ArcDialLookAndFeel arcLnF; // スキンを追加
 
     void setupRotarySlider(juce::Slider& slider, juce::Label& label, const juce::String& name);
 
@@ -21,9 +23,8 @@ private:
     juce::Slider mixSlider;
     juce::Label outGainLabel;
     juce::Label mixLabel;
-    juce::ToggleButton listenButton;
+    juce::TextButton listenButton; // ★ ToggleButton から TextButton に変更！
 
-    // Gain Matching 統合パーツ
     juce::ComboBox timeCombo;
     juce::Label timeComboLabel;
     juce::TextButton analyzeButton;

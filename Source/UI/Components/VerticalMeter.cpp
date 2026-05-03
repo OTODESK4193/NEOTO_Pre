@@ -1,81 +1,70 @@
 #include "VerticalMeter.h"
 
-VerticalMeter::VerticalMeter()
-{
-    // 60FPSで滑らかにアニメーションさせるためのタイマー
-    startTimerHz(60);
-}
-
-VerticalMeter::~VerticalMeter()
-{
-    stopTimer();
-}
+VerticalMeter::VerticalMeter() { startTimerHz(60); }
+VerticalMeter::~VerticalMeter() { stopTimer(); }
 
 void VerticalMeter::setLevelDb(float newLevelDb)
 {
     targetLevelDb = juce::jlimit(-60.0f, 6.0f, newLevelDb);
-
-    // ピークホールドの更新
     if (targetLevelDb > peakHoldDb) {
         peakHoldDb = targetLevelDb;
-        peakHoldTimer = 60; // 約1秒間保持 (60fps * 1)
+        peakHoldTimer = 60;
     }
 }
 
 void VerticalMeter::timerCallback()
 {
-    // メーターの滑らかな追従（アタックは速く、リリースは遅く）
-    if (targetLevelDb > currentLevelDb) {
-        currentLevelDb = targetLevelDb; // アタックは即座に反応
-    }
+    if (targetLevelDb > currentLevelDb) currentLevelDb = targetLevelDb;
     else {
-        currentLevelDb -= 1.5f; // 滑らかなリリース
+        currentLevelDb -= 1.5f;
         if (currentLevelDb < targetLevelDb) currentLevelDb = targetLevelDb;
     }
 
-    // ピークホールドの減衰
-    if (peakHoldTimer > 0) {
-        peakHoldTimer--;
-    }
+    if (peakHoldTimer > 0) peakHoldTimer--;
     else {
         peakHoldDb -= 0.5f;
         if (peakHoldDb < -60.0f) peakHoldDb = -60.0f;
     }
-
     repaint();
 }
 
 void VerticalMeter::resized()
 {
-    // グラデーションの作成（上：赤、中央：黄、下：緑）
-    auto bounds = getLocalBounds().toFloat();
-    gradient = juce::ColourGradient(juce::Colours::red, bounds.getTopLeft(),
-        juce::Colours::green, bounds.getBottomLeft(), false);
-    gradient.addColour(0.3, juce::Colours::yellow);
+    auto bounds = getLocalBounds().toFloat().withTrimmedTop(25.0f);
+    // パステル調のグラデーション (Soft Pink -> Pastel Blue)
+    gradient = juce::ColourGradient(juce::Colour(0xffff88a3), bounds.getTopLeft(), juce::Colour(0xff88aaff), bounds.getBottomLeft(), false);
+    gradient.addColour(0.3, juce::Colour(0xff88eeff)); // Soft Cyan
+    gradient.addColour(0.6, juce::Colour(0xff88ffaa)); // Mint Green
+    gradient.addColour(0.85, juce::Colour(0xffffee88)); // Soft Yellow
 }
 
 void VerticalMeter::paint(juce::Graphics& g)
 {
     auto bounds = getLocalBounds().toFloat();
 
-    // 背景（暗いメーター枠）
+    // 上部の数値表示
+    auto textArea = bounds.removeFromTop(20.0f);
+    g.setColour(juce::Colours::white);
+    g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
+    juce::String peakText = (peakHoldDb > -59.0f) ? juce::String(peakHoldDb, 1) : "-inf";
+    g.drawText(peakText, textArea, juce::Justification::centredBottom);
+
+    bounds.removeFromTop(5.0f); // 隙間
+
+    // メーター背景
     g.setColour(juce::Colour(0xff111111));
     g.fillRoundedRectangle(bounds, 4.0f);
 
-    // dBを高さの割合に変換 (-60dB 〜 0dB)
     auto dbToY = [&bounds](float db) {
         float normalized = juce::jmap(db, -60.0f, 0.0f, 0.0f, 1.0f);
-        normalized = juce::jlimit(0.0f, 1.0f, normalized);
-        return bounds.getHeight() * (1.0f - normalized);
+        return bounds.getHeight() * (1.0f - juce::jlimit(0.0f, 1.0f, normalized));
         };
 
-    // 現在のレベルの描画
     float yPos = dbToY(currentLevelDb);
     juce::Rectangle<float> meterFill(bounds.getX(), yPos, bounds.getWidth(), bounds.getHeight() - yPos);
     g.setGradientFill(gradient);
     g.fillRoundedRectangle(meterFill, 4.0f);
 
-    // ピークホールド線の描画
     if (peakHoldDb > -59.0f) {
         float peakY = dbToY(peakHoldDb);
         g.setColour(juce::Colours::white.withAlpha(0.8f));

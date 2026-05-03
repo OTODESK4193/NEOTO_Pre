@@ -318,8 +318,10 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
             finalSignal *= outputGainSmoother[channel].getNextValue();
             channelData[sample] = finalSignal;
 
-            // 出力のピーク検出
             currentBlockOutPeak = std::max(currentBlockOutPeak, std::abs(finalSignal));
+
+            // ★ 追加: Lチャンネル(0)の最終出力をアナライザーに送る
+            if (channel == 0) pushNextSampleIntoFifo(finalSignal);
         }
     }
 
@@ -363,6 +365,17 @@ void NeotoPreAudioProcessor::setStateInformation(const void* data, int sizeInByt
     if (xmlState != nullptr)
         if (xmlState->hasTagName(apvts.state.getType()))
             apvts.replaceState(juce::ValueTree::fromXml(*xmlState));
+}
+
+void NeotoPreAudioProcessor::pushNextSampleIntoFifo(float sample) noexcept
+{
+    if (audioFifo.getFreeSpace() > 0) {
+        int start1, block1, start2, block2;
+        audioFifo.prepareToWrite(1, start1, block1, start2, block2);
+        if (block1 > 0) audioFifoBuffer[(size_t)start1] = sample;
+        if (block2 > 0) audioFifoBuffer[(size_t)start2] = sample;
+        audioFifo.finishedWrite(1);
+    }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new NeotoPreAudioProcessor(); }

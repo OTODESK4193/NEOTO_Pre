@@ -62,6 +62,18 @@ public:
     std::atomic<float> inputPeakDb{ -60.0f };
     std::atomic<float> outputPeakDb{ -60.0f };
 
+    // ==============================================================================
+    // 変更：倍音（THD）表示用 (1st to 7th)
+    // ==============================================================================
+    std::atomic<float> harmonicLevels[7];
+
+    // ==============================================================================
+    // スペクトラム・アナライザー用 FIFOバッファ
+    // ==============================================================================
+    juce::AbstractFifo audioFifo{ 8192 };
+    std::array<float, 8192> audioFifoBuffer;
+    void pushNextSampleIntoFifo(float sample) noexcept;
+
 private:
     std::array<std::unique_ptr<juce::dsp::Oversampling<float>>, 3> oversamplers;
     int currentOsMode = -1;
