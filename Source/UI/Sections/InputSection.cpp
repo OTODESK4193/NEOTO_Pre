@@ -5,7 +5,7 @@ InputSection::InputSection(NeotoPreAudioProcessor& p) : audioProcessor(p)
     setupRotarySlider(inputGainSlider, inputGainLabel, "Input Gain");
     inputGainSlider.setLookAndFeel(&arcLnF);
 
-    osModeCombo.addItemList({ "Off (1x)", "2x", "4x" }, 1);
+    osModeCombo.addItemList({ "Off (1x)", "2x", "4x", "8x" }, 1); // ★ "8x" を追加
     addAndMakeVisible(osModeCombo);
 
     osModeLabel.setText("Oversampling", juce::dontSendNotification);

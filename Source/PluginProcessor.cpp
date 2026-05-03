@@ -34,7 +34,7 @@ NeotoPreAudioProcessor::NeotoPreAudioProcessor()
     ageParam = apvts.getRawParameterValue("age");
     analysisTimeParam = apvts.getRawParameterValue("analysis_time");
 
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 4; ++i) {
         oversamplers[i] = std::make_unique<juce::dsp::Oversampling<float>>(
             2, i, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, true);
     }
@@ -78,7 +78,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout NeotoPreAudioProcessor::crea
 
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID{ "os_mode", 1 }, "Oversampling",
-        juce::StringArray{ "Off (1x)", "2x", "4x" }, 1));
+        juce::StringArray{ "Off (1x)", "2x", "4x", "8x" }, 1)); // ★ "8x" を追加
 
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID{ "in_trans_type", 1 }, "Input Transformer",

@@ -75,7 +75,7 @@ public:
     void pushNextSampleIntoFifo(float sample) noexcept;
 
 private:
-    std::array<std::unique_ptr<juce::dsp::Oversampling<float>>, 3> oversamplers;
+    std::array<std::unique_ptr<juce::dsp::Oversampling<float>>, 4> oversamplers;
     int currentOsMode = -1;
     double currentSampleRate = 44100.0;
     std::array<AutoLevel, 2> autoLevels;
