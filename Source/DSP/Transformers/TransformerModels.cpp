@@ -113,15 +113,23 @@ void OutputTransformer_Steel::prepare(double sampleRate) {
 
 float OutputTransformer_Steel::processSample(float input, float colorParam, float airParam, float ageParam) {
     if (colorParam != lastColorParam) {
-        double fcHpf = juce::jmap(static_cast<double>(colorParam), 0.0, 100.0, 15.0, 5.0);
+        // ★ 3次曲線によるスケーリング (0-80%は微細な変化、80%以降で急増)
+        double curve = std::pow(static_cast<double>(colorParam) / 100.0, 3.0);
+
+        double fcHpf = juce::jmap(curve, 0.0, 1.0, 15.0, 5.0);
         alphaHpf = std::exp(-juce::MathConstants<double>::twoPi * fcHpf / fs);
-        double apfFreq = juce::jmap(static_cast<double>(colorParam), 0.0, 100.0, 60.0, 20.0);
+
+        double apfFreq = juce::jmap(curve, 0.0, 1.0, 60.0, 20.0);
         double tanVal = std::tan(juce::MathConstants<double>::pi * apfFreq / fs);
         apfAlpha = (tanVal - 1.0) / (tanVal + 1.0);
-        hystHc = juce::jmap(static_cast<double>(colorParam), 0.0, 100.0, 0.05, 0.30);
-        hystDrive = juce::jmap(static_cast<double>(colorParam), 0.0, 100.0, 1.2, 2.5);
+
+        // ヒステリシスパラメータも3次曲線に従う
+        hystHc = juce::jmap(curve, 0.0, 1.0, 0.05, 0.30);
+        hystDrive = juce::jmap(curve, 0.0, 1.0, 1.2, 2.5);
+
         lastColorParam = colorParam;
     }
+
     if (airParam != lastAirParam) {
         double gainDb = juce::jmap(static_cast<double>(airParam), 0.0, 100.0, 0.0, 6.0);
         double A = std::pow(10.0, gainDb / 40.0);
@@ -132,6 +140,7 @@ float OutputTransformer_Steel::processSample(float input, float colorParam, floa
         a1 = (-2.0 * std::cos(w0)) / a0; a2 = (1.0 - alphaQ / A) / a0;
         lastAirParam = airParam;
     }
+
     if (ageParam != lastAgeParam) {
         double fcLpf = juce::jmap(static_cast<double>(ageParam), 0.0, 100.0, 30000.0, 10000.0);
         alphaLpf = std::exp(-juce::MathConstants<double>::twoPi * fcLpf / fs);
@@ -139,17 +148,24 @@ float OutputTransformer_Steel::processSample(float input, float colorParam, floa
     }
 
     double dIn = static_cast<double>(input);
+
+    // 位相シフト(APF)を最初にかける
     double apfOut = apfAlpha * dIn + lastApfInput - apfAlpha * apfState;
     apfState = apfOut; lastApfInput = dIn;
 
+    // アナライザーモード時はヒステリシスをバイパス
     double hystOut = isAnalyzerMode ? static_cast<double>(apfOut)
         : hysteresisEngine.processSample(static_cast<float>(apfOut), hystDrive, hystHc);
 
+    // Air Biquad
     double airOut = b0 * hystOut + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
     x2 = x1; x1 = hystOut; y2 = y1; y1 = airOut;
+
+    // Age LPF
     double lpfOut = airOut * (1.0 - alphaLpf) + alphaLpf * lpfState;
     lpfState = lpfOut;
 
+    // 物理モデルの最終段にHPFを移動し、残留磁化（DCオフセット）を完全遮断
     double hpfOut = lpfOut - lastInput + alphaHpf * hpfState;
     hpfState = hpfOut; lastInput = lpfOut;
 
@@ -157,7 +173,7 @@ float OutputTransformer_Steel::processSample(float input, float colorParam, floa
 }
 
 //==============================================================================
-// Output: Iron の実装
+// Output: Iron の実装 (Tellinen: タイトでアグレッシブなヒステリシス)
 //==============================================================================
 void OutputTransformer_Iron::prepare(double sampleRate) {
     fs = sampleRate; hpfState = 0.0; lastInput = 0.0; lpfState = 0.0;
@@ -168,12 +184,18 @@ void OutputTransformer_Iron::prepare(double sampleRate) {
 
 float OutputTransformer_Iron::processSample(float input, float colorParam, float airParam, float ageParam) {
     if (colorParam != lastColorParam) {
-        double fcHpf = juce::jmap(static_cast<double>(colorParam), 0.0, 100.0, 20.0, 10.0);
+        // ★ 3次曲線によるスケーリング
+        double curve = std::pow(static_cast<double>(colorParam) / 100.0, 3.0);
+
+        double fcHpf = juce::jmap(curve, 0.0, 1.0, 20.0, 10.0);
         alphaHpf = std::exp(-juce::MathConstants<double>::twoPi * fcHpf / fs);
-        hystHc = juce::jmap(static_cast<double>(colorParam), 0.0, 100.0, 0.02, 0.15);
-        hystDrive = juce::jmap(static_cast<double>(colorParam), 0.0, 100.0, 1.5, 3.5);
+
+        hystHc = juce::jmap(curve, 0.0, 1.0, 0.02, 0.15);
+        hystDrive = juce::jmap(curve, 0.0, 1.0, 1.5, 3.5);
+
         lastColorParam = colorParam;
     }
+
     if (airParam != lastAirParam) {
         double gainDb = juce::jmap(static_cast<double>(airParam), 0.0, 100.0, 0.0, 6.0);
         double A = std::pow(10.0, gainDb / 40.0);
@@ -184,6 +206,7 @@ float OutputTransformer_Iron::processSample(float input, float colorParam, float
         a1 = (-2.0 * std::cos(w0)) / a0; a2 = (1.0 - alphaQ / A) / a0;
         lastAirParam = airParam;
     }
+
     if (ageParam != lastAgeParam) {
         double fcLpf = juce::jmap(static_cast<double>(ageParam), 0.0, 100.0, 30000.0, 10000.0);
         alphaLpf = std::exp(-juce::MathConstants<double>::twoPi * fcLpf / fs);
@@ -192,14 +215,17 @@ float OutputTransformer_Iron::processSample(float input, float colorParam, float
 
     double dIn = static_cast<double>(input);
 
+    // アナライザーモード時はバイパス
     double hystOut = isAnalyzerMode ? static_cast<double>(dIn)
         : hysteresisEngine.processSample(static_cast<float>(dIn), hystDrive, hystHc);
 
     double airOut = b0 * hystOut + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
     x2 = x1; x1 = hystOut; y2 = y1; y1 = airOut;
+
     double lpfOut = airOut * (1.0 - alphaLpf) + alphaLpf * lpfState;
     lpfState = lpfOut;
 
+    // ★ 出力段でのHPF (DC完全除去)
     double hpfOut = lpfOut - lastInput + alphaHpf * hpfState;
     hpfState = hpfOut; lastInput = lpfOut;
 
@@ -207,7 +233,7 @@ float OutputTransformer_Iron::processSample(float input, float colorParam, float
 }
 
 //==============================================================================
-// Output: Nickel の実装
+// ★ Output: Nickel の実装 (J-Aモデル: 極限の透明感とクリッピング)
 //==============================================================================
 void OutputTransformer_Nickel::prepare(double sampleRate) {
     fs = sampleRate; hpfState = 0.0; lastInput = 0.0; lpfState = 0.0;
@@ -218,13 +244,21 @@ void OutputTransformer_Nickel::prepare(double sampleRate) {
 
 float OutputTransformer_Nickel::processSample(float input, float colorParam, float airParam, float ageParam) {
     if (colorParam != lastColorParam) {
-        double fcHpf = juce::jmap(static_cast<double>(colorParam), 0.0, 100.0, 5.0, 2.0);
+        // ★ 3次曲線によるスケーリング
+        double curve = std::pow(static_cast<double>(colorParam) / 100.0, 3.0);
+
+        double fcHpf = juce::jmap(curve, 0.0, 1.0, 5.0, 2.0);
         alphaHpf = std::exp(-juce::MathConstants<double>::twoPi * fcHpf / fs);
-        ja_a = juce::jmap(static_cast<double>(colorParam), 0.0, 100.0, 2.0, 0.05);
-        ja_k = juce::jmap(static_cast<double>(colorParam), 0.0, 100.0, 0.001, 0.03);
-        ja_c = juce::jmap(static_cast<double>(colorParam), 0.0, 100.0, 0.99, 0.50);
+
+        // J-Aモデルの物理パラメータをプロ仕様に再調整
+        // a (Drive): Color 0 で 4.0 (極めて透明)、Color 100 で 0.05 (深い飽和)
+        ja_a = juce::jmap(curve, 0.0, 1.0, 4.0, 0.05);
+        ja_k = juce::jmap(curve, 0.0, 1.0, 0.0005, 0.04);
+        ja_c = juce::jmap(curve, 0.0, 1.0, 0.999, 0.45);
+
         lastColorParam = colorParam;
     }
+
     if (airParam != lastAirParam) {
         double gainDb = juce::jmap(static_cast<double>(airParam), 0.0, 100.0, 0.0, 6.0);
         double A = std::pow(10.0, gainDb / 40.0);
@@ -235,6 +269,7 @@ float OutputTransformer_Nickel::processSample(float input, float colorParam, flo
         a1 = (-2.0 * std::cos(w0)) / a0; a2 = (1.0 - alphaQ / A) / a0;
         lastAirParam = airParam;
     }
+
     if (ageParam != lastAgeParam) {
         double fcLpf = juce::jmap(static_cast<double>(ageParam), 0.0, 100.0, 30000.0, 10000.0);
         alphaLpf = std::exp(-juce::MathConstants<double>::twoPi * fcLpf / fs);
@@ -245,17 +280,25 @@ float OutputTransformer_Nickel::processSample(float input, float colorParam, flo
     double hystOut = dIn;
 
     if (!isAnalyzerMode) {
-        double driveGain = juce::jmap(static_cast<double>(colorParam), 0.0, 100.0, 1.0, 2.5);
+        // ★ J-Aモデルの自動メイクアップ・ゲイン & ドライブ
+        double driveGain = juce::jmap(std::pow(static_cast<double>(colorParam) / 100.0, 3.0), 0.0, 1.0, 1.0, 2.5);
+
+        // Langevin関数の傾き相殺係数 3.0 * ja_a
         double inputScaling = 3.0 * ja_a * driveGain;
+
         hystOut = hysteresisEngine.processSample(static_cast<float>(dIn * inputScaling), ja_a, ja_k, ja_c);
-        hystOut /= std::sqrt(driveGain);
+
+        // 出力ゲインの正規化
+        hystOut /= (3.0 * ja_a * std::sqrt(driveGain));
     }
 
     double airOut = b0 * hystOut + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
     x2 = x1; x1 = hystOut; y2 = y1; y1 = airOut;
+
     double lpfOut = airOut * (1.0 - alphaLpf) + alphaLpf * lpfState;
     lpfState = lpfOut;
 
+    // 出力段でのHPF (DC完全除去)
     double hpfOut = lpfOut - lastInput + alphaHpf * hpfState;
     hpfState = hpfOut; lastInput = lpfOut;
 

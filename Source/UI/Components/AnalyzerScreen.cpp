@@ -214,7 +214,10 @@ void AnalyzerScreen::calculateHarmonics()
     float totalEvenDrive = std::clamp(mixEven + asymNormalized, 0.0f, 1.0f);
 
     float driveFactor = drive / 100.0f;
+
+    // ★ Colorノブに3次曲線を適用 (0-80%は緩やか、80-100%で急増)
     float colorFactor = color / 100.0f;
+    float colorCurve = std::pow(colorFactor, 3.0f);
 
     // プリアンプセクションの基本倍音
     float evenLvl = driveFactor * totalEvenDrive * 0.8f;
@@ -222,20 +225,21 @@ void AnalyzerScreen::calculateHarmonics()
 
     // ★ 出力トランスの物理特性・選択状態による倍音計算の拡張
     if (outIdx == 1) {
-        // Nickel (J-Aモデル): Colorを上げると非線形性が強まり、高次倍音が急増する
-        oddLvl += (colorFactor * colorFactor) * 1.5f;
-        evenLvl += colorFactor * 0.2f;
+        // Nickel (J-Aモデル): 
+        // Color 0 でも「通しただけ」の微細な反応を追加 (0.02f)
+        oddLvl += 0.02f + (colorCurve * 1.8f);
+        evenLvl += 0.01f + (colorCurve * 0.3f);
     }
     else if (outIdx == 2 || outIdx == 3) {
         // Steel / Iron (Tellinenモデル): 
-        // Color 0 の時点でも、実機トランス特有の「通しただけで太くなる」質感をUIに反映
-        oddLvl += 0.15f + colorFactor * 0.6f;
-        evenLvl += 0.05f + colorFactor * 0.3f;
+        // 以前の 0.15f では多すぎたため、プロ仕様の極微量 (0.08f) からスタート
+        oddLvl += 0.08f + colorCurve * 0.8f;
+        evenLvl += 0.03f + colorCurve * 0.4f;
     }
     else if (outIdx == 4) {
         // Amorphous: 
-        // クリーンな特性だが、Colorを上げると急峻なハードクリップが発生する特性を表現
-        oddLvl += (colorFactor * colorFactor * colorFactor) * 2.0f;
+        // クリーンな特性を活かしつつ、後半で急峻にクリップを発生させる (colorCurveの自乗)
+        oddLvl += (colorCurve * colorCurve) * 2.5f;
     }
 
     evenLvl = std::clamp(evenLvl, 0.0f, 1.5f);
@@ -255,16 +259,15 @@ void AnalyzerScreen::calculateHarmonics()
     audioProcessor.harmonicLevels[6].store(oddLvl * 8.0f);
 }
 
-// ★ ナイキスト周波数(22.05kHz)を右端の基準とする
 float AnalyzerScreen::getPositionForFrequency(float freq, float width)
 {
     const float minFreq = 5.0f;
+    // ★ ナイキストの崖（垂直落下）を防ぐため、20kHzを上限に設定
     const float maxFreq = 20000.0f;
     float normalized = std::log10(freq / minFreq) / std::log10(maxFreq / minFreq);
     return normalized * width;
 }
 
-// ★ X座標から周波数を逆算する関数
 float AnalyzerScreen::getFrequencyForPosition(float x, float width)
 {
     const float minFreq = 5.0f;
@@ -272,7 +275,6 @@ float AnalyzerScreen::getFrequencyForPosition(float x, float width)
     float normalized = x / width;
     return minFreq * std::pow(maxFreq / minFreq, normalized);
 }
-
 void AnalyzerScreen::paint(juce::Graphics& g)
 {
     auto bounds = getLocalBounds().toFloat();
