@@ -224,16 +224,24 @@ void AnalyzerScreen::calculateHarmonics()
     float evenLvl = driveFactor * totalEvenDrive * 0.8f;
     float oddLvl = driveFactor * mixOdd * 0.8f;
 
-    // ★ Nickelのプロ仕様リチューニング: Color 0 ではメーターを極限まで沈める
+    // ★ 出力トランスの物理特性に基づく「プロ仕様」のリチューニング
     if (outIdx == 1) {
+        // Nickel (J-Aモデル): Color 0 ではメーターを極限まで沈める
         oddLvl += 0.001f + (colorCurve * 2.0f);
         evenLvl += 0.0005f + (colorCurve * 0.4f);
     }
-    else if (outIdx == 2 || outIdx == 3) {
-        oddLvl += 0.015f + colorCurve * 1.0f;
-        evenLvl += 0.005f + colorCurve * 0.5f;
+    else if (outIdx == 2) {
+        // Steel (Tellinenモデル・ワイド): 温かみのあるマイルドな飽和
+        oddLvl += 0.015f + colorCurve * 0.8f;
+        evenLvl += 0.005f + colorCurve * 0.6f;
+    }
+    else if (outIdx == 3) {
+        // Iron (Tellinenモデル・タイト): 奇数次倍音が鋭く立ち上がるパンチ力
+        oddLvl += 0.015f + colorCurve * 1.3f;
+        evenLvl += 0.005f + colorCurve * 0.3f;
     }
     else if (outIdx == 4) {
+        // Amorphous: クリーンさを維持しつつ後半で鋭利なクリップ
         oddLvl += (colorCurve * colorCurve) * 2.5f;
     }
 
@@ -250,6 +258,7 @@ void AnalyzerScreen::calculateHarmonics()
     audioProcessor.harmonicLevels[4].store(oddLvl * 15.0f);
     audioProcessor.harmonicLevels[6].store(oddLvl * 8.0f);
 }
+
 
 float AnalyzerScreen::getPositionForFrequency(float freq, float width)
 {
