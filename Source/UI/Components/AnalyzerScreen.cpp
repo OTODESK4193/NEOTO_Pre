@@ -84,7 +84,6 @@ void AnalyzerScreen::drawNextFrameOfSpectrum()
 
 void AnalyzerScreen::generateEQCurve()
 {
-    // ★ 初期のロジックへロールバック (1.0f のインパルスを入力)
     std::fill(eqFftData.begin(), eqFftData.end(), 0.0f);
     eqFftData[0] = 1.0f;
 
@@ -105,16 +104,38 @@ void AnalyzerScreen::generateEQCurve()
         eqFftData[i] = s;
     }
 
-    fft.performFrequencyOnlyForwardTransform(eqFftData.data());
+    // ★ 変更: 位相情報を保持するため、複素数出力用のRealOnly Forward Transformを使用
+    fft.performRealOnlyForwardTransform(eqFftData.data());
 
     auto bounds = getLocalBounds().toFloat();
     eqCurvePath.clear();
     bool firstPoint = true;
 
+    // ★ 1次ADAAの遅延量 (0.5サンプル)
+    const float delaySamples = 0.5f;
+
     for (int i = 1; i < 4096; ++i) {
         float freq = (i * 44100.0f) / 8192.0f;
         if (freq < 20.0f || freq > 20000.0f) continue;
-        float db = juce::Decibels::gainToDecibels(eqFftData[i]) - juce::Decibels::gainToDecibels(1.0f);
+
+        // ★ 複素スペクトルからの実部・虚部の取得
+        float re = eqFftData[i * 2];
+        float im = eqFftData[i * 2 + 1];
+
+        // ★ 位相逆回転の適用 (Phase Rotation Cancellation)
+        // theta = 2 * pi * k * D / N
+        float theta = juce::MathConstants<float>::twoPi * static_cast<float>(i) * delaySamples / 8192.0f;
+        float cosTheta = std::cos(theta);
+        float sinTheta = std::sin(theta);
+
+        // 複素数乗算: (re + j*im) * (cosTheta + j*sinTheta)
+        float reFlat = re * cosTheta - im * sinTheta;
+        float imFlat = re * sinTheta + im * cosTheta;
+
+        // 相殺後の正確な振幅(Magnitude)を算出
+        float mag = std::sqrt(reFlat * reFlat + imFlat * imFlat);
+
+        float db = juce::Decibels::gainToDecibels(mag) - juce::Decibels::gainToDecibels(1.0f);
         float y = juce::jmap(db, -24.0f, 24.0f, bounds.getHeight(), 0.0f);
         y = juce::jlimit(0.0f, bounds.getHeight(), y);
         float x = getPositionForFrequency(freq, bounds.getWidth());

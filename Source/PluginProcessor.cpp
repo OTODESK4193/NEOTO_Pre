@@ -128,7 +128,7 @@ void NeotoPreAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBloc
 
     for (int i = 0; i < 2; ++i) {
         inputGainSmoother[i].reset(sampleRate, 0.02);
-        outputGainSmoother[i].reset(sampleRate, 0.02);
+        outputGainSmoother[i].reset(sampleRate, 0.15);
         mixSmoother[i].reset(sampleRate, 0.02);
 
         inputGainSmoother[i].setCurrentAndTargetValue(juce::Decibels::decibelsToGain(inputGainParam->load()));
@@ -194,9 +194,18 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
             for (int i = 0; i < 5; ++i) inTransEngines[ch][i]->prepare(newRate);
             for (int i = 0; i < 6; ++i) preampEngines[ch][i]->prepare(newRate);
             for (int i = 0; i < 5; ++i) outTransEngines[ch][i]->prepare(newRate);
-            driveSmoother[ch].reset(newRate, 0.02); colorSmoother[ch].reset(newRate, 0.02);
-            charSmoother[ch].reset(newRate, 0.02); asymSmoother[ch].reset(newRate, 0.02);
-            airSmoother[ch].reset(newRate, 0.02); ageSmoother[ch].reset(newRate, 0.02);
+            driveSmoother[ch].reset(newRate, 0.02);
+
+            // ★ 変更: ここも colorSmoother の前に OutputGain用のスムーザーリセット(0.15)が存在する場合は修正。
+            // ※既存コードのこのブロックには outputGainSmoother.reset が記述されていませんでした。
+            // サンプルレート変更時に破綻しないよう、以下の一文を追記することを強く推奨します。
+            outputGainSmoother[ch].reset(newRate, 0.15);
+
+            colorSmoother[ch].reset(newRate, 0.02);
+            charSmoother[ch].reset(newRate, 0.02);
+            asymSmoother[ch].reset(newRate, 0.02);
+            airSmoother[ch].reset(newRate, 0.02);
+            ageSmoother[ch].reset(newRate, 0.02);
         }
         int latency = currentOsMode > 0 ? static_cast<int>(oversamplers[currentOsMode]->getLatencyInSamples()) : 0;
         setLatencySamples(latency);

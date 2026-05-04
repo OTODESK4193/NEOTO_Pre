@@ -61,20 +61,32 @@ float Preamp_API::processSample(float input, float driveParam, float charParam, 
     double intOut = drivenSignal * oneMinusAlpha + alpha * integratorState;
     integratorState = intOut;
 
-    // ★ 修正: ADAAの入力 x に clamp をかけない。
     // 数学的に連続な区分定義積分 F1_cubic 内でハードクリップを処理することで、積分破壊を解決する。
     double x = intOut + bias;
 
     double softclipOut = 0.0;
     double dx = x - lastInputADAA;
-    const double eps = 1e-8;
+    double abs_dx = std::abs(dx);
 
-    if (std::abs(dx) < eps) {
-        // テイラー展開による近似
+    // ★ 変更: デュアルスレッショルドによる適応的クロスフェードの導入
+    const double eps_lower = 1e-8; // 完全にフォールバックする下限
+    const double eps_upper = 1e-4; // クロスフェードを開始する上限
+
+    if (abs_dx < eps_lower) {
+        // 100% テイラー展開による近似 (ゼロ除算回避)
         softclipOut = ADAA_Math::fx_cubic((x + lastInputADAA) * 0.5);
     }
+    else if (abs_dx < eps_upper) {
+        // 遷移領域: 滑らかなクロスフェード (Adaptive Crossfade)
+        double fallback = ADAA_Math::fx_cubic((x + lastInputADAA) * 0.5);
+        double adaa = (ADAA_Math::F1_cubic(x) - ADAA_Math::F1_cubic(lastInputADAA)) / dx;
+
+        // 距離に応じた重み付け (0.0 〜 1.0)
+        double w = (abs_dx - eps_lower) / (eps_upper - eps_lower);
+        softclipOut = w * adaa + (1.0 - w) * fallback;
+    }
     else {
-        // 正確な積分差分 (区分定義された F1 により、|x|>1.0 でもエイリアスを抑制)
+        // 100% 正確な積分差分 (1次ADAA)
         softclipOut = (ADAA_Math::F1_cubic(x) - ADAA_Math::F1_cubic(lastInputADAA)) / dx;
     }
 
