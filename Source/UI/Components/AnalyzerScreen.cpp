@@ -215,7 +215,7 @@ void AnalyzerScreen::calculateHarmonics()
 
     float driveFactor = drive / 100.0f;
 
-    // ★ Colorノブに3次曲線を適用 (0-80%は緩やか、80-100%で急増)
+    // ★ Colorノブに3次曲線を適用 (0-80%は極めて緩やか、80-100%で急増)
     float colorFactor = color / 100.0f;
     float colorCurve = std::pow(colorFactor, 3.0f);
 
@@ -223,22 +223,22 @@ void AnalyzerScreen::calculateHarmonics()
     float evenLvl = driveFactor * totalEvenDrive * 0.8f;
     float oddLvl = driveFactor * mixOdd * 0.8f;
 
-    // ★ 出力トランスの物理特性・選択状態による倍音計算の拡張
+    // ★ 出力トランスの物理特性に基づく「プロ仕様」のリチューニング
     if (outIdx == 1) {
         // Nickel (J-Aモデル): 
-        // Color 0 でも「通しただけ」の微細な反応を追加 (0.02f)
-        oddLvl += 0.02f + (colorCurve * 1.8f);
-        evenLvl += 0.01f + (colorCurve * 0.3f);
+        // Color 0 では、熟練の耳だけが感知できるレベル (0.005f) まで引き下げ
+        oddLvl += 0.005f + (colorCurve * 2.0f);
+        evenLvl += 0.002f + (colorCurve * 0.4f);
     }
     else if (outIdx == 2 || outIdx == 3) {
         // Steel / Iron (Tellinenモデル): 
-        // 以前の 0.15f では多すぎたため、プロ仕様の極微量 (0.08f) からスタート
-        oddLvl += 0.08f + colorCurve * 0.8f;
-        evenLvl += 0.03f + colorCurve * 0.4f;
+        // Color 0 での「通しただけの質感」を 0.015f まで絞り、ノブの後半で実機の飽和を表現
+        oddLvl += 0.015f + colorCurve * 1.0f;
+        evenLvl += 0.005f + colorCurve * 0.5f;
     }
     else if (outIdx == 4) {
         // Amorphous: 
-        // クリーンな特性を活かしつつ、後半で急峻にクリップを発生させる (colorCurveの自乗)
+        // クリーンさを極限まで維持しつつ、後半で鋭利なクリップを発生させる
         oddLvl += (colorCurve * colorCurve) * 2.5f;
     }
 
@@ -248,12 +248,12 @@ void AnalyzerScreen::calculateHarmonics()
     // 描画用アトミック変数へのストア
     audioProcessor.harmonicLevels[0].store(100.0f); // Root
 
-    // 偶数次倍音
+    // 偶数次倍音 (2nd, 4th, 6th)
     audioProcessor.harmonicLevels[1].store(evenLvl * 45.0f);
     audioProcessor.harmonicLevels[3].store(evenLvl * 20.0f);
     audioProcessor.harmonicLevels[5].store(evenLvl * 10.0f);
 
-    // 奇数次倍音
+    // 奇数次倍音 (3rd, 5th, 7th)
     audioProcessor.harmonicLevels[2].store(oddLvl * 35.0f);
     audioProcessor.harmonicLevels[4].store(oddLvl * 15.0f);
     audioProcessor.harmonicLevels[6].store(oddLvl * 8.0f);

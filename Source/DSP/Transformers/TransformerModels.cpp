@@ -58,22 +58,31 @@ float InputTransformer_Amorphous::processSample(float input) {
 
 // ... (Inputトランス群の実装はそのまま残してください) ...
 
-//==============================================================================
-// ★ Output: Amorphous の実装 (超広帯域 & ハードクリップ)
-//==============================================================================
+// ==============================================================================
+// ★ Output: Amorphous の実装 (Age完全対応 & プロ仕様スケーリング)
+// ==============================================================================
 void OutputTransformer_Amorphous::prepare(double sampleRate) {
-    fs = sampleRate; x1 = 0.0; x2 = 0.0; y1 = 0.0; y2 = 0.0;
-    lastColorParam = -1.0f; lastAirParam = -1.0f;
+    fs = sampleRate;
+    x1 = 0.0; x2 = 0.0; y1 = 0.0; y2 = 0.0;
+    lpfState = 0.0; // ★ Age用の状態変数を初期化
+    lastColorParam = -1.0f;
+    lastAirParam = -1.0f;
+    lastAgeParam = -1.0f;
 }
 
 float OutputTransformer_Amorphous::processSample(float input, float colorParam, float airParam, float ageParam) {
+    // 1. Color スケーリング (0-80%は緩やか、80-100%で急増)
     if (colorParam != lastColorParam) {
-        // Colorを上げると閾値が下がり、急激にハードクリップする
-        threshold = juce::jmap(static_cast<double>(colorParam), 0.0, 100.0, 2.0, 0.2);
-        driveGain = juce::jmap(static_cast<double>(colorParam), 0.0, 100.0, 1.0, 2.5);
+        // ★ 3次曲線を採用: curve = x^3
+        double curve = std::pow(static_cast<double>(colorParam) / 100.0, 3.0);
+
+        // Color 0 (curve=0) の時、thresholdは5.0となり実質的にクリップしません。
+        threshold = juce::jmap(curve, 0.0, 1.0, 5.0, 0.35);
+        driveGain = juce::jmap(curve, 0.0, 1.0, 1.0, 3.5);
         lastColorParam = colorParam;
     }
 
+    // 2. Air パラメータ
     if (airParam != lastAirParam) {
         double gainDb = juce::jmap(static_cast<double>(airParam), 0.0, 100.0, 0.0, 6.0);
         double A = std::pow(10.0, gainDb / 40.0);
@@ -85,20 +94,32 @@ float OutputTransformer_Amorphous::processSample(float input, float colorParam, 
         lastAirParam = airParam;
     }
 
+    // 3. Age パラメータ (実装漏れの修正)
+    if (ageParam != lastAgeParam) {
+        // 経年変化による高域の減衰 (35kHzから12kHzまで)
+        double fcLpf = juce::jmap(static_cast<double>(ageParam), 0.0, 100.0, 35000.0, 12000.0);
+        alphaLpf = std::exp(-juce::MathConstants<double>::twoPi * fcLpf / fs);
+        lastAgeParam = ageParam;
+    }
+
     double out = static_cast<double>(input);
 
+    // 非線形処理 (アナライザーモード時はバイパス)
     if (!isAnalyzerMode) {
-        // Amorphous特有のクリーンかつ鋭利なハードクリップ
         out *= driveGain;
         out = std::clamp(out, -threshold, threshold);
         out /= driveGain;
     }
 
-    // 超高域のAirのみ付加
+    // Air Biquad
     double airOut = b0 * out + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
     x2 = x1; x1 = out; y2 = y1; y1 = airOut;
 
-    return static_cast<float>(airOut);
+    // ★ Age LPF 適用 (状態保存を確実に行う)
+    double lpfOut = airOut * (1.0 - alphaLpf) + alphaLpf * lpfState;
+    lpfState = lpfOut;
+
+    return static_cast<float>(lpfOut);
 }
 
 //==============================================================================
@@ -124,8 +145,8 @@ float OutputTransformer_Steel::processSample(float input, float colorParam, floa
         apfAlpha = (tanVal - 1.0) / (tanVal + 1.0);
 
         // ヒステリシスパラメータも3次曲線に従う
-        hystHc = juce::jmap(curve, 0.0, 1.0, 0.05, 0.30);
-        hystDrive = juce::jmap(curve, 0.0, 1.0, 1.2, 2.5);
+        hystHc = juce::jmap(curve, 0.0, 1.0, 0.001, 0.30);
+        hystDrive = juce::jmap(curve, 0.0, 1.0, 1.0, 2.5);
 
         lastColorParam = colorParam;
     }
@@ -190,8 +211,8 @@ float OutputTransformer_Iron::processSample(float input, float colorParam, float
         double fcHpf = juce::jmap(curve, 0.0, 1.0, 20.0, 10.0);
         alphaHpf = std::exp(-juce::MathConstants<double>::twoPi * fcHpf / fs);
 
-        hystHc = juce::jmap(curve, 0.0, 1.0, 0.02, 0.15);
-        hystDrive = juce::jmap(curve, 0.0, 1.0, 1.5, 3.5);
+        hystHc = juce::jmap(curve, 0.0, 1.0, 0.001, 0.30);
+        hystDrive = juce::jmap(curve, 0.0, 1.0, 1.0, 2.5);
 
         lastColorParam = colorParam;
     }
@@ -233,7 +254,7 @@ float OutputTransformer_Iron::processSample(float input, float colorParam, float
 }
 
 //==============================================================================
-// ★ Output: Nickel の実装 (J-Aモデル: 極限の透明感とクリッピング)
+// ★ Output: Nickel の実装 (J-Aモデル: ゲイン低下を修正し、3次曲線スケーリングを適用)
 //==============================================================================
 void OutputTransformer_Nickel::prepare(double sampleRate) {
     fs = sampleRate; hpfState = 0.0; lastInput = 0.0; lpfState = 0.0;
@@ -243,22 +264,24 @@ void OutputTransformer_Nickel::prepare(double sampleRate) {
 }
 
 float OutputTransformer_Nickel::processSample(float input, float colorParam, float airParam, float ageParam) {
+    // 1. Color スケーリング (3次曲線により、前半はプロ用の隠し味、後半で一気に激変)
     if (colorParam != lastColorParam) {
-        // ★ 3次曲線によるスケーリング
         double curve = std::pow(static_cast<double>(colorParam) / 100.0, 3.0);
 
+        // HPF: Color 0 で 5Hz、100% で 2Hz まで拡張
         double fcHpf = juce::jmap(curve, 0.0, 1.0, 5.0, 2.0);
         alphaHpf = std::exp(-juce::MathConstants<double>::twoPi * fcHpf / fs);
 
-        // J-Aモデルの物理パラメータをプロ仕様に再調整
-        // a (Drive): Color 0 で 4.0 (極めて透明)、Color 100 で 0.05 (深い飽和)
+        // J-Aモデル物理パラメータ
+        // ja_a (Shape): 0% では 4.0 (極めてリニアな領域を使用)
         ja_a = juce::jmap(curve, 0.0, 1.0, 4.0, 0.05);
-        ja_k = juce::jmap(curve, 0.0, 1.0, 0.0005, 0.04);
+        ja_k = juce::jmap(curve, 0.0, 1.0, 0.0001, 0.04);
         ja_c = juce::jmap(curve, 0.0, 1.0, 0.999, 0.45);
 
         lastColorParam = colorParam;
     }
 
+    // 2. Air パラメータ
     if (airParam != lastAirParam) {
         double gainDb = juce::jmap(static_cast<double>(airParam), 0.0, 100.0, 0.0, 6.0);
         double A = std::pow(10.0, gainDb / 40.0);
@@ -270,8 +293,9 @@ float OutputTransformer_Nickel::processSample(float input, float colorParam, flo
         lastAirParam = airParam;
     }
 
+    // 3. Age パラメータ
     if (ageParam != lastAgeParam) {
-        double fcLpf = juce::jmap(static_cast<double>(ageParam), 0.0, 100.0, 30000.0, 10000.0);
+        double fcLpf = juce::jmap(static_cast<double>(ageParam), 0.0, 100.0, 35000.0, 10000.0);
         alphaLpf = std::exp(-juce::MathConstants<double>::twoPi * fcLpf / fs);
         lastAgeParam = ageParam;
     }
@@ -280,25 +304,31 @@ float OutputTransformer_Nickel::processSample(float input, float colorParam, flo
     double hystOut = dIn;
 
     if (!isAnalyzerMode) {
-        // ★ J-Aモデルの自動メイクアップ・ゲイン & ドライブ
-        double driveGain = juce::jmap(std::pow(static_cast<double>(colorParam) / 100.0, 3.0), 0.0, 1.0, 1.0, 2.5);
+        // ★ リチューニングされた非線形ドライブロジック
+        double curve = std::pow(static_cast<double>(colorParam) / 100.0, 3.0);
+        double driveFactor = juce::jmap(curve, 0.0, 1.0, 1.0, 2.5);
 
-        // Langevin関数の傾き相殺係数 3.0 * ja_a
-        double inputScaling = 3.0 * ja_a * driveGain;
+        // ランジュバン関数の原点付近の傾き 1/(3a) を打ち消すための係数 3a
+        // これにより ja_a の値に関わらず、小信号時は常に「入力 = 出力」になります。
+        double scaling = 3.0 * ja_a;
 
-        hystOut = hysteresisEngine.processSample(static_cast<float>(dIn * inputScaling), ja_a, ja_k, ja_c);
+        // J-Aエンジンへ投入 (入力段でスケーリングとドライブを適用)
+        hystOut = hysteresisEngine.processSample(static_cast<float>(dIn * scaling * driveFactor), ja_a, ja_k, ja_c);
 
-        // 出力ゲインの正規化
-        hystOut /= (3.0 * ja_a * std::sqrt(driveGain));
+        // ★ 出力段の修正: 
+        // 内部の Langevin(H/a) によって 1/(3a) が適用済みなので、3aで割る必要はありません。
+        // ドライブによる実効音量の増加分（sqrt(driveFactor)）のみを補正します。
+        hystOut /= (scaling * std::sqrt(driveFactor));
     }
 
+    // 4. フィルターチェーン
     double airOut = b0 * hystOut + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
     x2 = x1; x1 = hystOut; y2 = y1; y1 = airOut;
 
     double lpfOut = airOut * (1.0 - alphaLpf) + alphaLpf * lpfState;
     lpfState = lpfOut;
 
-    // 出力段でのHPF (DC完全除去)
+    // 5. 最終段 HPF (DC除去)
     double hpfOut = lpfOut - lastInput + alphaHpf * hpfState;
     hpfState = hpfOut; lastInput = lpfOut;
 

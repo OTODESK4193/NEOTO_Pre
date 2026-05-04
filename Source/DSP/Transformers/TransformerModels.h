@@ -163,21 +163,32 @@ public:
     float processSample(float input, float, float, float) override { return input; }
 };
 
-// ★ 新規実装: Amorphous クラスのメンバ変数
 class OutputTransformer_Amorphous : public IOutputTransformerEngine {
 public:
     void prepare(double sampleRate) override;
     float processSample(float input, float colorParam, float airParam, float ageParam) override;
     void setAnalyzerMode(bool isAnalyzer) { isAnalyzerMode = isAnalyzer; }
+
 private:
     double fs = 44100.0;
     bool isAnalyzerMode = false;
-    float lastColorParam = -1.0f, lastAirParam = -1.0f;
-    double threshold = 1.0, driveGain = 1.0;
+
+    // ★ 状態管理用変数
+    float lastColorParam = -1.0f;
+    float lastAirParam = -1.0f;
+    float lastAgeParam = -1.0f; // 追加：Ageの変更検知用
+
+    double threshold = 1.0;
+    double driveGain = 1.0;
+
+    // ★ Biquad (Air) 用の状態変数
     double x1 = 0.0, x2 = 0.0, y1 = 0.0, y2 = 0.0;
     double b0 = 1.0, b1 = 0.0, b2 = 0.0, a1 = 0.0, a2 = 0.0;
-};
 
+    // ★ Age (LPF) 用の状態変数
+    double lpfState = 0.0;      // 追加：LPFの遅延要素
+    double alphaLpf = 0.0;      // 追加：LPFの係数
+};
 class OutputTransformer_Steel : public IOutputTransformerEngine {
 public:
     void prepare(double sampleRate) override;
