@@ -16,4 +16,18 @@ namespace ADAA_Math
     // 上記ハードクリップ関数の第1次積分
     double F1_hardclip(double x);
 
+    // ==============================================================================
+    // ★ 新規追加: チェビシェフ多項式ベースのハイブリッド・サチュレーション
+    // ==============================================================================
+
+    // 2次倍音（Smooth/Even）ジェネレータ: T2ベースの非線形関数
+    double fx_chebyshev_even(double x);
+    // 上記関数の第1次積分
+    double F1_chebyshev_even(double x);
+
+    // 3次倍音（Punch/Odd）ジェネレータ: T3ベースの非線形関数
+    double fx_chebyshev_odd(double x);
+    // 上記関数の第1次積分
+    double F1_chebyshev_odd(double x);
+
 } // namespace ADAA_Math

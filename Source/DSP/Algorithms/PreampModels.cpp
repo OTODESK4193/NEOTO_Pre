@@ -32,15 +32,25 @@ float Preamp_API::processSample(float input, float driveParam, float charParam, 
     }
 
     if (charParam != lastCharParam) {
-        double fc = juce::jmap(static_cast<double>(charParam), 0.0, 100.0, 10.0, 60.0);
+        // Character パラメータの役割を「倍音バランス」の制御へ再定義
+        // 0.0 = Odd (3次倍音主体), 100.0 = Even (2次倍音主体)
+        double charNormalized = static_cast<double>(charParam) / 100.0;
+        mixEven = charNormalized;
+        mixOdd = 1.0 - charNormalized;
+
+        // 積分器(Integrator)のカットオフは固定化、あるいは微調整に留める
+        double fc = 35.0; // 中庸な設定で固定
         alpha = std::exp(-juce::MathConstants<double>::twoPi * fc / fs);
         oneMinusAlpha = 1.0 - alpha;
         lastCharParam = charParam;
     }
 
     if (asymParam != lastAsymParam) {
+        // Asymmetryノブは、従来通りDCバイアス（さらなる非対称性と劣化の付加）として機能
         bias = juce::jmap(static_cast<double>(asymParam), 0.0, 100.0, 0.0, 0.4);
-        fxBias = ADAA_Math::fx_cubic(bias);
+
+        // バイアス加算時の直流オフセットを相殺するための補正値
+        fxBias = (ADAA_Math::fx_chebyshev_even(bias) * mixEven) + (ADAA_Math::fx_chebyshev_odd(bias) * mixOdd);
         lastAsymParam = asymParam;
     }
 
@@ -58,41 +68,54 @@ float Preamp_API::processSample(float input, float driveParam, float charParam, 
     double dynamicGain = 1.0 - (envState * sagRatio);
     drivenSignal *= std::max(0.1, dynamicGain);
 
+    // Integrator
     double intOut = drivenSignal * oneMinusAlpha + alpha * integratorState;
     integratorState = intOut;
 
-    // 数学的に連続な区分定義積分 F1_cubic 内でハードクリップを処理することで、積分破壊を解決する。
     double x = intOut + bias;
 
     double softclipOut = 0.0;
     double dx = x - lastInputADAA;
     double abs_dx = std::abs(dx);
 
-    // ★ 変更: デュアルスレッショルドによる適応的クロスフェードの導入
-    const double eps_lower = 1e-8; // 完全にフォールバックする下限
-    const double eps_upper = 1e-4; // クロスフェードを開始する上限
+    // デュアルスレッショルドによる適応的クロスフェード
+    const double eps_lower = 1e-8;
+    const double eps_upper = 1e-4;
+
+    // ★ 変更: ラムダ式の戻り値型を -> double と明示し、変数のキャプチャを確実に行う
+    auto compute_fallback = [&](double val) -> double {
+        return (ADAA_Math::fx_chebyshev_even(val) * mixEven) + (ADAA_Math::fx_chebyshev_odd(val) * mixOdd);
+        };
+
+    auto compute_adaa = [&](double val_cur, double val_prev, double delta) -> double {
+        double f1_even_cur = ADAA_Math::F1_chebyshev_even(val_cur);
+        double f1_even_prev = ADAA_Math::F1_chebyshev_even(val_prev);
+        double adaa_even = (f1_even_cur - f1_even_prev) / delta;
+
+        double f1_odd_cur = ADAA_Math::F1_chebyshev_odd(val_cur);
+        double f1_odd_prev = ADAA_Math::F1_chebyshev_odd(val_prev);
+        double adaa_odd = (f1_odd_cur - f1_odd_prev) / delta;
+
+        return (adaa_even * mixEven) + (adaa_odd * mixOdd);
+        };
 
     if (abs_dx < eps_lower) {
-        // 100% テイラー展開による近似 (ゼロ除算回避)
-        softclipOut = ADAA_Math::fx_cubic((x + lastInputADAA) * 0.5);
+        softclipOut = compute_fallback((x + lastInputADAA) * 0.5);
     }
     else if (abs_dx < eps_upper) {
-        // 遷移領域: 滑らかなクロスフェード (Adaptive Crossfade)
-        double fallback = ADAA_Math::fx_cubic((x + lastInputADAA) * 0.5);
-        double adaa = (ADAA_Math::F1_cubic(x) - ADAA_Math::F1_cubic(lastInputADAA)) / dx;
-
-        // 距離に応じた重み付け (0.0 〜 1.0)
+        double fallback = compute_fallback((x + lastInputADAA) * 0.5);
+        double adaa = compute_adaa(x, lastInputADAA, dx);
         double w = (abs_dx - eps_lower) / (eps_upper - eps_lower);
         softclipOut = w * adaa + (1.0 - w) * fallback;
     }
     else {
-        // 100% 正確な積分差分 (1次ADAA)
-        softclipOut = (ADAA_Math::F1_cubic(x) - ADAA_Math::F1_cubic(lastInputADAA)) / dx;
+        softclipOut = compute_adaa(x, lastInputADAA, dx);
     }
 
     lastInputADAA = x;
     double outputWithoutDC = softclipOut - fxBias;
 
+    // Differentiator
     double diffOut = (outputWithoutDC - alpha * lastSoftclipOut) / oneMinusAlpha;
     lastSoftclipOut = outputWithoutDC;
 

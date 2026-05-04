@@ -167,15 +167,34 @@ void AnalyzerScreen::generateEQCurve()
 void AnalyzerScreen::calculateHarmonics()
 {
     float drive = audioProcessor.apvts.getRawParameterValue("drive")->load();
+    float charac = audioProcessor.apvts.getRawParameterValue("character")->load();
     float asym = audioProcessor.apvts.getRawParameterValue("asymmetry")->load();
 
+    // ★ 変更: Character パラメータから奇数次・偶数次のブレンド比率を算出 (0.0 〜 1.0)
+    // 0 = 奇数次主体 (mixOdd = 1.0, mixEven = 0.0)
+    // 100 = 偶数次主体 (mixOdd = 0.0, mixEven = 1.0)
+    float charNormalized = charac / 100.0f;
+    float mixEven = charNormalized;
+    float mixOdd = 1.0f - charNormalized;
+
+    // Asymmetryノブも偶数次倍音（非対称クリップ）を生成するため、効果を合算する
+    float asymNormalized = asym / 100.0f;
+    float totalEvenDrive = std::clamp(mixEven + asymNormalized, 0.0f, 1.0f);
+
+    float driveFactor = drive / 100.0f;
+
+    // 基音 (1st)
     audioProcessor.harmonicLevels[0].store(100.0f);
-    audioProcessor.harmonicLevels[1].store((drive / 100.0f) * (asym / 100.0f) * 45.0f);
-    audioProcessor.harmonicLevels[2].store((drive / 100.0f) * 35.0f);
-    audioProcessor.harmonicLevels[3].store((drive / 100.0f) * (asym / 100.0f) * 20.0f);
-    audioProcessor.harmonicLevels[4].store((drive / 100.0f) * 15.0f);
-    audioProcessor.harmonicLevels[5].store((drive / 100.0f) * (asym / 100.0f) * 10.0f);
-    audioProcessor.harmonicLevels[6].store((drive / 100.0f) * 8.0f);
+
+    // 偶数次 (Even: 2nd, 4th, 6th) - totalEvenDrive と drive に依存
+    audioProcessor.harmonicLevels[1].store(driveFactor * totalEvenDrive * 45.0f);
+    audioProcessor.harmonicLevels[3].store(driveFactor * totalEvenDrive * 20.0f);
+    audioProcessor.harmonicLevels[5].store(driveFactor * totalEvenDrive * 10.0f);
+
+    // 奇数次 (Odd: 3rd, 5th, 7th) - mixOdd と drive に依存
+    audioProcessor.harmonicLevels[2].store(driveFactor * mixOdd * 35.0f);
+    audioProcessor.harmonicLevels[4].store(driveFactor * mixOdd * 15.0f);
+    audioProcessor.harmonicLevels[6].store(driveFactor * mixOdd * 8.0f);
 }
 
 float AnalyzerScreen::getPositionForFrequency(float freq, float width)

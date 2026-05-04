@@ -16,7 +16,7 @@ public:
 private:
     double fs = 44100.0;
     double integratorState = 0.0;
-    double lastInputADAA = 0.0; // ★ 初期仕様の1次ADAAステートへロールバック
+    double lastInputADAA = 0.0;
     double lastSoftclipOut = 0.0;
     double envState = 0.0;
 
@@ -27,6 +27,10 @@ private:
 
     double gain = 1.0, makeUp = 1.0, alpha = 0.0, oneMinusAlpha = 1.0;
     double bias = 0.0, fxBias = 0.0, envAttackCoef = 0.0, envReleaseCoef = 0.0, sagRatio = 0.0;
+
+    // ★ 新規追加: 倍音ブレンド用の状態変数
+    double mixEven = 0.5;
+    double mixOdd = 0.5;
 };
 
 //==============================================================================
