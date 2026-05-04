@@ -117,9 +117,9 @@ private:
     std::array<juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>, 2> airSmoother;
     std::array<juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>, 2> ageSmoother;
 
-    // ★ Dry信号のレイテンシ補正用リングバッファ (動的メモリ確保を避ける設計)
-    std::array<std::vector<float>, 2> dryDelayBuffer;
-    std::array<int, 2> dryDelayWritePos{ 0, 0 };
+    // ★ High-SR Dry Tapping 用の軽量リングバッファ (ADAAの分数遅延補正のみを担当)
+    std::array<std::array<float, 16>, 2> dryHistHigh{};
+    std::array<int, 2> dryHistIdx{ 0, 0 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(NeotoPreAudioProcessor)
 };

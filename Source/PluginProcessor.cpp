@@ -117,10 +117,10 @@ void NeotoPreAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBloc
     currentSampleRate = sampleRate;
     currentOsMode = static_cast<int>(osModeParam->load());
 
-    // ★ 巨大な固定長リングバッファの初期化 (プロセスブロック中の動的確保を完全排除)
+    // ★ 高解像度用の軽量履歴バッファ初期化
     for (int i = 0; i < 2; ++i) {
-        dryDelayBuffer[i].assign(32768, 0.0f);
-        dryDelayWritePos[i] = 0;
+        dryHistHigh[i].fill(0.0f);
+        dryHistIdx[i] = 0;
     }
 
     for (auto& al : autoLevels) al.prepare(sampleRate);
@@ -195,7 +195,7 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
             for (int i = 0; i < 5; ++i) outTransEngines[ch][i]->prepare(newRate);
 
             driveSmoother[ch].reset(newRate, 0.02);
-            outputGainSmoother[ch].reset(newRate, 0.15); // ★ 追加: SampleRate変更時の再計算
+            outputGainSmoother[ch].reset(newRate, 0.15);
             colorSmoother[ch].reset(newRate, 0.02);
             charSmoother[ch].reset(newRate, 0.02);
             asymSmoother[ch].reset(newRate, 0.02);
@@ -267,22 +267,25 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
     float currentBlockInPeak = 0.0f;
     float currentBlockOutPeak = 0.0f;
 
-    // [Phase 1] Input Gain & リングバッファへの記録
+    // ==============================================================================
+    // [Phase 1] Input Gain & AutoLevel Dry Tracking
+    // ==============================================================================
     for (int channel = 0; channel < totalNumInputChannels; ++channel) {
         float* channelData = buffer.getWritePointer(channel);
         for (int sample = 0; sample < numSamples; ++sample) {
             float s = channelData[sample] * inputGainSmoother[channel].getNextValue();
             currentBlockInPeak = std::max(currentBlockInPeak, std::abs(s));
 
-            // ★ Dry信号をリングバッファへ格納
-            dryDelayBuffer[channel][dryDelayWritePos[channel]] = s;
-            dryDelayWritePos[channel] = (dryDelayWritePos[channel] + 1) % 32768;
+            // ★ AutoLevel用のDryデータは、OSのレイテンシを受けないこの段階で記録する
+            autoLevels[channel].pushDrySample(s);
 
             channelData[sample] = s;
         }
     }
 
-    // [Phase 2 & 3] Oversampling & DSP (Ghost Path Integration)
+    // ==============================================================================
+    // [Phase 2 & 3] Oversampling & DSP (High-SR Dry Tapping & Ghost Path Integration)
+    // ==============================================================================
     juce::dsp::AudioBlock<float> block(buffer);
     juce::dsp::AudioBlock<float> upsampledBlock;
     if (currentOsMode > 0) upsampledBlock = oversamplers[currentOsMode]->processSamplesUp(block);
@@ -290,7 +293,7 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
 
     const int numSamplesHigh = upsampledBlock.getNumSamples();
 
-    // ★ 各非線形エンジンのADAA遅延を取得 (高サンプルレート基準)
+    // ★ 各非線形エンジンのADAA遅延を取得 (高サンプルレート基準での分数サンプル)
     float inTransLatency = inTransEngines[0][currentInTransIdx]->getLatencySamples();
     float preampLatency = preampEngines[0][currentPreampIdx]->getLatencySamples();
     float totalAdaaLatencyHigh = inTransLatency + preampLatency;
@@ -298,50 +301,42 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
     for (int channel = 0; channel < upsampledBlock.getNumChannels(); ++channel) {
         float* channelData = upsampledBlock.getChannelPointer(channel);
 
-        // 当該ブロックの先頭読み取り位置 (低サンプルレート基準の書き込み位置から、OSとADAAの遅延分を遡る)
-        float osLatencyLow = (currentOsMode > 0) ? oversamplers[currentOsMode]->getLatencyInSamples() : 0.0f;
-
-        // 高サンプルレートでのADAA遅延を、低サンプルレートに換算
-        float adaaLatencyLow = totalAdaaLatencyHigh / (1 << currentOsMode);
-        float totalDelayLow = osLatencyLow + adaaLatencyLow;
-
-        float readPosBase = static_cast<float>(dryDelayWritePos[channel] - numSamples) - totalDelayLow;
-
         for (int sample = 0; sample < numSamplesHigh; ++sample) {
-            float s = channelData[sample];
+            // ★ 高解像度(OS適用済み)のDry信号を直接抽出
+            float dryHigh = channelData[sample];
+
+            // リングバッファへ記録
+            dryHistHigh[channel][dryHistIdx[channel]] = dryHigh;
 
             // 1. 非線形処理の実行 (Input Trans -> Preamp)
-            s = inTransEngines[channel][currentInTransIdx]->processSample(s);
+            float s = inTransEngines[channel][currentInTransIdx]->processSample(dryHigh);
             s = preampEngines[channel][currentPreampIdx]->processSample(s,
                 driveSmoother[channel].getNextValue(),
                 charSmoother[channel].getNextValue(),
                 asymSmoother[channel].getNextValue(),
                 ageSmoother[channel].getNextValue());
 
-            // 2. Dry信号の取得と分数遅延補間 (Linear Interpolation)
-            // 高サンプルレートループ内で、低サンプルレートのDryバッファから補間して読み出す
-            float sampleRatio = static_cast<float>(sample) / (1 << currentOsMode);
-            float readPosF = readPosBase + sampleRatio;
+            // 2. 高解像度空間でのADAA遅延補償 (Linear Interpolation)
+            int dInt = static_cast<int>(totalAdaaLatencyHigh);
+            float dFrac = totalAdaaLatencyHigh - dInt;
 
-            while (readPosF < 0.0f) readPosF += 32768.0f;
-            while (readPosF >= 32768.0f) readPosF -= 32768.0f;
+            // バッファサイズ16に基づく安全なラップアラウンド読み出し
+            int readIdx1 = (dryHistIdx[channel] - dInt + 16) % 16;
+            int readIdx2 = (dryHistIdx[channel] - dInt - 1 + 16) % 16;
 
-            int idx1 = static_cast<int>(readPosF);
-            int idx2 = (idx1 + 1) % 32768;
-            float frac = readPosF - static_cast<float>(idx1);
+            float delayedDry = dryHistHigh[channel][readIdx1] * (1.0f - dFrac) + dryHistHigh[channel][readIdx2] * dFrac;
 
-            float delayedDry = dryDelayBuffer[channel][idx1] * (1.0f - frac) + dryDelayBuffer[channel][idx2] * frac;
+            dryHistIdx[channel] = (dryHistIdx[channel] + 1) % 16;
 
             // 3. 非線形処理直後での Analog Blend (Dry/Wet Mix)
-            // この時点で、遅延補正されたDry信号と、非線形処理されたWet信号の位相が完全に一致しています。
             float mixRatio = mixSmoother[channel].getNextValue();
             float mixedSignal = delayedDry + (s - delayedDry) * mixRatio;
 
             // Listen モードの適用
             float postMixSignal = isListenDry ? delayedDry : mixedSignal;
 
-            // 4. 線形/トランス処理 (Output Trans)
-            // 共通のIIRフィルタリング(Air/Age/HPF)を適用し、位相回転とEQカーブをDry/Wet両方に付与する
+            // 4. 線形/トランス処理 (Output Trans) Ghost Path
+            // この段を通過することで、Dry成分にも実機同様の位相回転とEQ特性が付与され、完全な響きの融合が完了する
             postMixSignal = outTransEngines[channel][currentOutTransIdx]->processSample(postMixSignal,
                 colorSmoother[channel].getNextValue(),
                 airSmoother[channel].getNextValue(),
@@ -351,25 +346,18 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
         }
     }
 
+    // ==============================================================================
     // [Phase 4] Downsampling
+    // ==============================================================================
     if (currentOsMode > 0) oversamplers[currentOsMode]->processSamplesDown(block);
 
-    // [Phase 5] AutoLevel & Output Gain
+    // ==============================================================================
+    // [Phase 5] Output Gain & AutoLevel Wet Tracking
+    // ==============================================================================
     for (int channel = 0; channel < totalNumInputChannels; ++channel) {
         float* channelData = buffer.getWritePointer(channel);
 
-        // AutoLevelのDry入力用: 単純に入力段のDryBuffer（遅延なし）から取得
-        float readPosBaseAutoLevel = static_cast<float>(dryDelayWritePos[channel] - numSamples);
-
         for (int sample = 0; sample < numSamples; ++sample) {
-
-            float readPosF = readPosBaseAutoLevel + static_cast<float>(sample);
-            while (readPosF < 0.0f) readPosF += 32768.0f;
-            while (readPosF >= 32768.0f) readPosF -= 32768.0f;
-            int idx1 = static_cast<int>(readPosF);
-
-            autoLevels[channel].pushDrySample(dryDelayBuffer[channel][idx1]);
-
             float finalSignal = channelData[sample] * outputGainSmoother[channel].getNextValue();
 
             autoLevels[channel].pushWetSample(finalSignal);
