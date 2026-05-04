@@ -11,12 +11,13 @@ public:
     Preamp_API() = default;
     void prepare(double sampleRate) override;
     float processSample(float input, float driveParam, float charParam, float asymParam, float ageParam) override;
-    float getLatencySamples() const override { return 0.5f; } // ★ 1次ADAAなので0.5を返す
+    float processDrySample(float input, float driveParam, float charParam, float asymParam, float ageParam) override;
 
 private:
     double fs = 44100.0;
     double integratorState = 0.0;
     double lastInputADAA = 0.0;
+    double lastInputADAA_dry = 0.0; // ★ Dry用のADAA状態変数
     double lastSoftclipOut = 0.0;
     double envState = 0.0;
 
@@ -33,39 +34,39 @@ private:
 };
 
 //==============================================================================
-// 2〜6. 新規追加モデル (現在は空箱バイパス)
+// 2〜6. Dummy Models
 //==============================================================================
 class Preamp_Neve : public IPreampEngine {
 public:
     void prepare(double) override {}
     float processSample(float input, float, float, float, float) override { return input; }
-    float getLatencySamples() const override { return 0.0f; }
+    float processDrySample(float input, float, float, float, float) override { return input; }
 };
 
 class Preamp_Tube : public IPreampEngine {
 public:
     void prepare(double) override {}
     float processSample(float input, float, float, float, float) override { return input; }
-    float getLatencySamples() const override { return 0.0f; }
+    float processDrySample(float input, float, float, float, float) override { return input; }
 };
 
 class Preamp_SSL : public IPreampEngine {
 public:
     void prepare(double) override {}
     float processSample(float input, float, float, float, float) override { return input; }
-    float getLatencySamples() const override { return 0.0f; }
+    float processDrySample(float input, float, float, float, float) override { return input; }
 };
 
 class Preamp_Modern1 : public IPreampEngine {
 public:
     void prepare(double) override {}
     float processSample(float input, float, float, float, float) override { return input; }
-    float getLatencySamples() const override { return 0.0f; }
+    float processDrySample(float input, float, float, float, float) override { return input; }
 };
 
 class Preamp_Modern2 : public IPreampEngine {
 public:
     void prepare(double) override {}
     float processSample(float input, float, float, float, float) override { return input; }
-    float getLatencySamples() const override { return 0.0f; }
+    float processDrySample(float input, float, float, float, float) override { return input; }
 };

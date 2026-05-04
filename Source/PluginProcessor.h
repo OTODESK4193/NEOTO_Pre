@@ -117,9 +117,5 @@ private:
     std::array<juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>, 2> airSmoother;
     std::array<juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>, 2> ageSmoother;
 
-    // ★ High-SR Dry Tapping 用の軽量リングバッファ (ADAAの分数遅延補正のみを担当)
-    std::array<std::array<float, 16>, 2> dryHistHigh{};
-    std::array<int, 2> dryHistIdx{ 0, 0 };
-
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(NeotoPreAudioProcessor)
 };

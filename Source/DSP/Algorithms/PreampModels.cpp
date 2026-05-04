@@ -5,21 +5,29 @@
 //==============================================================================
 // API Style の実装
 //==============================================================================
-void Preamp_API::prepare(double sampleRate)
-{
+#include "PreampModels.h"
+
+// (既存の Preamp_API::prepare や processSample はそのまま維持してください)
+
+void Preamp_API::prepare(double sampleRate) {
     fs = sampleRate;
     integratorState = 0.0;
     lastInputADAA = 0.0;
+    lastInputADAA_dry = 0.0; // ★ 追加
     lastSoftclipOut = 0.0;
     envState = 0.0;
+    lastDriveParam = -1.0f; lastCharParam = -1.0f; lastAsymParam = -1.0f; lastAgeParam = -1.0f;
+}
 
-    envAttackCoef = std::exp(-1.0 / (0.005 * fs));
-    envReleaseCoef = std::exp(-1.0 / (0.050 * fs));
+// ★ 追加: PreampのGhost Path (1次ADAAの線形特性である2タップ移動平均のみを適用し、非線形歪みを回避)
+float Preamp_API::processDrySample(float input, float driveParam, float charParam, float asymParam, float ageParam) {
+    double dInput = static_cast<double>(input);
 
-    lastDriveParam = -1.0f;
-    lastCharParam = -1.0f;
-    lastAsymParam = -1.0f;
-    lastAgeParam = -1.0f;
+    // ADAA1の線形伝達関数 H(z) = (1 + z^-1) / 2 と完全に同一の処理
+    double out = (dInput + lastInputADAA_dry) * 0.5;
+    lastInputADAA_dry = dInput;
+
+    return static_cast<float>(out);
 }
 
 float Preamp_API::processSample(float input, float driveParam, float charParam, float asymParam, float ageParam)
