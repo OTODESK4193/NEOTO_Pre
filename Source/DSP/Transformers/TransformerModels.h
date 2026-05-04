@@ -1,5 +1,4 @@
 #pragma once
-
 #include <JuceHeader.h>
 #include "../Core/EngineInterfaces.h"
 #include "../Core/ADAA_Math.h"
@@ -7,17 +6,18 @@
 // ==============================================================================
 // INPUT TRANSFORMERS (微小信号・1引数)
 // ==============================================================================
-
 class InputTransformer_None : public IInputTransformerEngine {
 public:
     void prepare(double) override {}
     float processSample(float input) override { return input; }
+    float getLatencySamples() const override { return 0.0f; }
 };
 
 class InputTransformer_Nickel : public IInputTransformerEngine {
 public:
     void prepare(double sampleRate) override;
     float processSample(float input) override;
+    float getLatencySamples() const override { return 0.5f; } // 1次ADAA
 private:
     double fs = 44100.0;
     double lastInputADAA = 0.0;
@@ -27,6 +27,7 @@ class InputTransformer_Steel : public IInputTransformerEngine {
 public:
     void prepare(double sampleRate) override;
     float processSample(float input) override;
+    float getLatencySamples() const override { return 0.5f; } // 1次ADAA
 private:
     double fs = 44100.0;
     double lastInputADAA = 0.0;
@@ -39,6 +40,7 @@ class InputTransformer_Iron : public IInputTransformerEngine {
 public:
     void prepare(double sampleRate) override;
     float processSample(float input) override;
+    float getLatencySamples() const override { return 0.5f; } // 1次ADAA
 private:
     double fs = 44100.0;
     double lastInputADAA = 0.0;
@@ -48,6 +50,7 @@ class InputTransformer_Amorphous : public IInputTransformerEngine {
 public:
     void prepare(double sampleRate) override;
     float processSample(float input) override;
+    float getLatencySamples() const override { return 0.5f; } // 1次ADAA
 private:
     double fs = 44100.0;
     double lastInputADAA = 0.0;
@@ -94,7 +97,6 @@ public:
 
         return static_cast<float>(y_next);
     }
-
 private:
     double last_x = 0.0, last_y = 0.0, last_Yl = 0.0, last_Yu = 0.0;
 };
@@ -147,7 +149,6 @@ public:
 
         return static_cast<float>(M_n);
     }
-
 private:
     double last_H = 0.0;
     double last_Mirr = 0.0;
@@ -156,11 +157,12 @@ private:
 //==============================================================================
 // OUTPUT TRANSFORMERS (大信号・4引数)
 //==============================================================================
-
 class OutputTransformer_None : public IOutputTransformerEngine {
 public:
     void prepare(double) override {}
     float processSample(float input, float, float, float) override { return input; }
+    float processDrySample(float input, float, float) override { return input; }
+    float getLatencySamples() const override { return 0.0f; }
 };
 
 // ==============================================================================
@@ -170,6 +172,8 @@ class OutputTransformer_Amorphous : public IOutputTransformerEngine {
 public:
     void prepare(double sampleRate) override;
     float processSample(float input, float colorParam, float airParam, float ageParam) override;
+    float processDrySample(float input, float airParam, float ageParam) override; // ★ 追加
+    float getLatencySamples() const override { return 0.0f; }
     void setAnalyzerMode(bool isAnalyzer) { isAnalyzerMode = isAnalyzer; }
 
 private:
@@ -177,22 +181,37 @@ private:
     bool isAnalyzerMode = false;
     float lastColorParam = -1.0f, lastAirParam = -1.0f, lastAgeParam = -1.0f;
     double threshold = 5.0, driveGain = 1.0;
+
+    // Wet用状態変数
     double x1 = 0.0, x2 = 0.0, y1 = 0.0, y2 = 0.0;
     double b0 = 1.0, b1 = 0.0, b2 = 0.0, a1 = 0.0, a2 = 0.0;
     double lpfState = 0.0, alphaLpf = 0.0;
-}; 
+
+    // ★ Dry用(Ghost Path) 状態変数
+    double x1_dry = 0.0, x2_dry = 0.0, y1_dry = 0.0, y2_dry = 0.0;
+    double lpfState_dry = 0.0;
+};
 
 class OutputTransformer_Steel : public IOutputTransformerEngine {
 public:
     void prepare(double sampleRate) override;
     float processSample(float input, float colorParam, float airParam, float ageParam) override;
+    float processDrySample(float input, float airParam, float ageParam) override; // ★ 追加
+    float getLatencySamples() const override { return 0.0f; }
     void setAnalyzerMode(bool isAnalyzer) { isAnalyzerMode = isAnalyzer; }
+
 private:
     double fs = 44100.0;
     bool isAnalyzerMode = false;
+
+    // Wet用状態変数
     double hpfState = 0.0, lastInput = 0.0, apfState = 0.0, lastApfInput = 0.0, lpfState = 0.0;
     double x1 = 0.0, x2 = 0.0, y1 = 0.0, y2 = 0.0;
     double b0 = 1.0, b1 = 0.0, b2 = 0.0, a1 = 0.0, a2 = 0.0;
+
+    // ★ Dry用(Ghost Path) 状態変数
+    double hpfState_dry = 0.0, lastInput_dry = 0.0, apfState_dry = 0.0, lastApfInput_dry = 0.0, lpfState_dry = 0.0;
+    double x1_dry = 0.0, x2_dry = 0.0, y1_dry = 0.0, y2_dry = 0.0;
 
     float lastColorParam = -1.0f, lastAirParam = -1.0f, lastAgeParam = -1.0f;
     double alphaHpf = 0.0, apfAlpha = 0.0, alphaLpf = 0.0;
@@ -204,13 +223,22 @@ class OutputTransformer_Iron : public IOutputTransformerEngine {
 public:
     void prepare(double sampleRate) override;
     float processSample(float input, float colorParam, float airParam, float ageParam) override;
+    float processDrySample(float input, float airParam, float ageParam) override; // ★ 追加
+    float getLatencySamples() const override { return 0.0f; }
     void setAnalyzerMode(bool isAnalyzer) { isAnalyzerMode = isAnalyzer; }
+
 private:
     double fs = 44100.0;
     bool isAnalyzerMode = false;
+
+    // Wet用状態変数
     double hpfState = 0.0, lastInput = 0.0, lpfState = 0.0;
     double x1 = 0.0, x2 = 0.0, y1 = 0.0, y2 = 0.0;
     double b0 = 1.0, b1 = 0.0, b2 = 0.0, a1 = 0.0, a2 = 0.0;
+
+    // ★ Dry用(Ghost Path) 状態変数
+    double hpfState_dry = 0.0, lastInput_dry = 0.0, lpfState_dry = 0.0;
+    double x1_dry = 0.0, x2_dry = 0.0, y1_dry = 0.0, y2_dry = 0.0;
 
     float lastColorParam = -1.0f, lastAirParam = -1.0f, lastAgeParam = -1.0f;
     double alphaHpf = 0.0, alphaLpf = 0.0;
@@ -222,27 +250,30 @@ class OutputTransformer_Nickel : public IOutputTransformerEngine {
 public:
     void prepare(double sampleRate) override;
     float processSample(float input, float colorParam, float airParam, float ageParam) override;
+    float processDrySample(float input, float airParam, float ageParam) override; // ★ 追加
+    float getLatencySamples() const override { return 0.0f; }
     void setAnalyzerMode(bool isAnalyzer) { isAnalyzerMode = isAnalyzer; }
 
 private:
     double fs = 44100.0;
     bool isAnalyzerMode = false;
 
-    // ★ パラメータ・状態保持用
     float lastColorParam = -1.0f;
     float lastAirParam = -1.0f;
     float lastAgeParam = -1.0f;
 
-    // ★ J-Aモデル用パラメータ (これが「定義されていない」と言われている正体です)
     double ja_a = 4.0;
     double ja_k = 0.0001;
     double ja_c = 0.999;
 
-    // ★ J-Aヒステリシスエンジン本体
     JAHysteresis hysteresisEngine;
 
-    // フィルター・DC除去用の状態変数
+    // Wet用状態変数
     double hpfState = 0.0, lastInput = 0.0, lpfState = 0.0, alphaHpf = 0.0, alphaLpf = 0.0;
     double x1 = 0.0, x2 = 0.0, y1 = 0.0, y2 = 0.0;
     double b0 = 1.0, b1 = 0.0, b2 = 0.0, a1 = 0.0, a2 = 0.0;
+
+    // ★ Dry用(Ghost Path) 状態変数
+    double hpfState_dry = 0.0, lastInput_dry = 0.0, lpfState_dry = 0.0;
+    double x1_dry = 0.0, x2_dry = 0.0, y1_dry = 0.0, y2_dry = 0.0;
 };

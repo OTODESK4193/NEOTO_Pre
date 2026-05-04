@@ -1,5 +1,4 @@
 #pragma once
-
 #include <JuceHeader.h>
 #include "../Core/EngineInterfaces.h"
 #include "../Core/ADAA_Math.h"
@@ -12,6 +11,7 @@ public:
     Preamp_API() = default;
     void prepare(double sampleRate) override;
     float processSample(float input, float driveParam, float charParam, float asymParam, float ageParam) override;
+    float getLatencySamples() const override { return 0.5f; } // ★ 1次ADAAなので0.5を返す
 
 private:
     double fs = 44100.0;
@@ -28,7 +28,6 @@ private:
     double gain = 1.0, makeUp = 1.0, alpha = 0.0, oneMinusAlpha = 1.0;
     double bias = 0.0, fxBias = 0.0, envAttackCoef = 0.0, envReleaseCoef = 0.0, sagRatio = 0.0;
 
-    // ★ 新規追加: 倍音ブレンド用の状態変数
     double mixEven = 0.5;
     double mixOdd = 0.5;
 };
@@ -40,28 +39,33 @@ class Preamp_Neve : public IPreampEngine {
 public:
     void prepare(double) override {}
     float processSample(float input, float, float, float, float) override { return input; }
+    float getLatencySamples() const override { return 0.0f; }
 };
 
 class Preamp_Tube : public IPreampEngine {
 public:
     void prepare(double) override {}
     float processSample(float input, float, float, float, float) override { return input; }
+    float getLatencySamples() const override { return 0.0f; }
 };
 
 class Preamp_SSL : public IPreampEngine {
 public:
     void prepare(double) override {}
     float processSample(float input, float, float, float, float) override { return input; }
+    float getLatencySamples() const override { return 0.0f; }
 };
 
 class Preamp_Modern1 : public IPreampEngine {
 public:
     void prepare(double) override {}
     float processSample(float input, float, float, float, float) override { return input; }
+    float getLatencySamples() const override { return 0.0f; }
 };
 
 class Preamp_Modern2 : public IPreampEngine {
 public:
     void prepare(double) override {}
     float processSample(float input, float, float, float, float) override { return input; }
+    float getLatencySamples() const override { return 0.0f; }
 };
