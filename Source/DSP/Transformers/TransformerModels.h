@@ -4,9 +4,9 @@
 #include "../Core/EngineInterfaces.h"
 #include "../Core/ADAA_Math.h"
 
-//==============================================================================
+// ==============================================================================
 // INPUT TRANSFORMERS (微小信号・1引数)
-//==============================================================================
+// ==============================================================================
 
 class InputTransformer_None : public IInputTransformerEngine {
 public:
@@ -54,7 +54,7 @@ private:
 };
 
 // ==============================================================================
-// ★ Tellinen ヒステリシス・プロセッサ (Steel / Iron 用コアエンジン)
+// Tellinen ヒステリシス・プロセッサ
 // ==============================================================================
 class TellinenHysteresis {
 public:
@@ -100,7 +100,7 @@ private:
 };
 
 // ==============================================================================
-// ★ 新規追加: 局所線形化 J-A ヒステリシス・プロセッサ (Nickel 用マスタリングエンジン)
+// 局所線形化 J-A ヒステリシス・プロセッサ 
 // ==============================================================================
 class JAHysteresis {
 public:
@@ -111,45 +111,37 @@ public:
         last_Mirr = 0.0;
     }
 
-    // ランジュバン関数 L(x) = coth(x) - 1/x (ゼロ除算回避のテイラー展開付き)
     inline double langevin(double x) {
         double ax = std::abs(x);
         if (ax < 1e-4) {
-            return x / 3.0; // 極微小領域の1次近似
+            return x / 3.0;
         }
         else if (ax < 0.1) {
-            return x / 3.0 - (x * x * x) / 45.0; // 微小領域のテイラー展開
+            return x / 3.0 - (x * x * x) / 45.0;
         }
         else if (ax > 20.0) {
-            return (x > 0.0 ? 1.0 : -1.0) - 1.0 / x; // 巨大領域の漸近展開 (cosh/sinhのオーバーフロー防止)
+            return (x > 0.0 ? 1.0 : -1.0) - 1.0 / x;
         }
         else {
-            return 1.0 / std::tanh(x) - 1.0 / x; // 通常領域
+            return 1.0 / std::tanh(x) - 1.0 / x;
         }
     }
 
-    // H: 入力信号, a: ドライブ/サチュレーションカーブ, k: ヒステリシス幅(保磁力), c: 可逆磁化率
     inline float processSample(float input, double a, double k, double c) {
         double H_n = static_cast<double>(input);
         double dH = H_n - last_H;
 
-        // 1. 非履歴磁化 (Anhysteretic Magnetization)
         double M_an = langevin(H_n / a);
 
-        // 2. 局所線形化 (Semi-implicit Euler) による不可逆磁化 (Mirr) の更新
-        // 反復計算(Newton-Raphson)を排除し O(1) で絶対安定化を実現
         double M_irr_n = last_Mirr;
-        double step = std::abs(dH) / std::max(1e-5, k); // kがゼロになるのを防ぐ
+        double step = std::abs(dH) / std::max(1e-5, k);
 
         if (dH * (M_an - last_Mirr) > 0.0) {
-            // 磁化がM_anに向かって進む場合のみMirrを更新
             M_irr_n = (last_Mirr + M_an * step) / (1.0 + step);
         }
 
-        // 3. 全磁化 (M) の計算
         double M_n = c * M_an + (1.0 - c) * M_irr_n;
 
-        // 状態保存
         last_H = H_n;
         last_Mirr = M_irr_n;
 
@@ -161,7 +153,6 @@ private:
     double last_Mirr = 0.0;
 };
 
-
 //==============================================================================
 // OUTPUT TRANSFORMERS (大信号・4引数)
 //==============================================================================
@@ -172,21 +163,29 @@ public:
     float processSample(float input, float, float, float) override { return input; }
 };
 
+// ★ 新規実装: Amorphous クラスのメンバ変数
 class OutputTransformer_Amorphous : public IOutputTransformerEngine {
 public:
-    void prepare(double) override {}
-    float processSample(float input, float, float, float) override { return input; }
+    void prepare(double sampleRate) override;
+    float processSample(float input, float colorParam, float airParam, float ageParam) override;
+    void setAnalyzerMode(bool isAnalyzer) { isAnalyzerMode = isAnalyzer; }
+private:
+    double fs = 44100.0;
+    bool isAnalyzerMode = false;
+    float lastColorParam = -1.0f, lastAirParam = -1.0f;
+    double threshold = 1.0, driveGain = 1.0;
+    double x1 = 0.0, x2 = 0.0, y1 = 0.0, y2 = 0.0;
+    double b0 = 1.0, b1 = 0.0, b2 = 0.0, a1 = 0.0, a2 = 0.0;
 };
 
 class OutputTransformer_Steel : public IOutputTransformerEngine {
 public:
-    // ★ アナライザー描画時のみヒステリシスをバイパスするスイッチ
-    void setAnalyzerMode(bool isAnalyzer) { isAnalyzerMode = isAnalyzer; }
     void prepare(double sampleRate) override;
     float processSample(float input, float colorParam, float airParam, float ageParam) override;
+    void setAnalyzerMode(bool isAnalyzer) { isAnalyzerMode = isAnalyzer; }
 private:
-    bool isAnalyzerMode = false;
     double fs = 44100.0;
+    bool isAnalyzerMode = false;
     double hpfState = 0.0, lastInput = 0.0, apfState = 0.0, lastApfInput = 0.0, lpfState = 0.0;
     double x1 = 0.0, x2 = 0.0, y1 = 0.0, y2 = 0.0;
     double b0 = 1.0, b1 = 0.0, b2 = 0.0, a1 = 0.0, a2 = 0.0;
@@ -199,13 +198,12 @@ private:
 
 class OutputTransformer_Iron : public IOutputTransformerEngine {
 public:
-    // ★ アナライザー描画時のみヒステリシスをバイパスするスイッチ
-    void setAnalyzerMode(bool isAnalyzer) { isAnalyzerMode = isAnalyzer; }
     void prepare(double sampleRate) override;
     float processSample(float input, float colorParam, float airParam, float ageParam) override;
+    void setAnalyzerMode(bool isAnalyzer) { isAnalyzerMode = isAnalyzer; }
 private:
-    bool isAnalyzerMode = false;
     double fs = 44100.0;
+    bool isAnalyzerMode = false;
     double hpfState = 0.0, lastInput = 0.0, lpfState = 0.0;
     double x1 = 0.0, x2 = 0.0, y1 = 0.0, y2 = 0.0;
     double b0 = 1.0, b1 = 0.0, b2 = 0.0, a1 = 0.0, a2 = 0.0;
@@ -218,13 +216,12 @@ private:
 
 class OutputTransformer_Nickel : public IOutputTransformerEngine {
 public:
-    // ★ アナライザー描画時のみヒステリシスをバイパスするスイッチ
-    void setAnalyzerMode(bool isAnalyzer) { isAnalyzerMode = isAnalyzer; }
     void prepare(double sampleRate) override;
     float processSample(float input, float colorParam, float airParam, float ageParam) override;
+    void setAnalyzerMode(bool isAnalyzer) { isAnalyzerMode = isAnalyzer; }
 private:
-    bool isAnalyzerMode = false;
     double fs = 44100.0;
+    bool isAnalyzerMode = false;
     double hpfState = 0.0, lastInput = 0.0, lpfState = 0.0;
     double x1 = 0.0, x2 = 0.0, y1 = 0.0, y2 = 0.0;
     double b0 = 1.0, b1 = 0.0, b2 = 0.0, a1 = 0.0, a2 = 0.0;
@@ -232,9 +229,8 @@ private:
     float lastColorParam = -1.0f, lastAirParam = -1.0f, lastAgeParam = -1.0f;
     double alphaHpf = 0.0, alphaLpf = 0.0;
 
-    // ★ J-A ヒステリシス関連パラメータとエンジン
-    double ja_a = 0.1; // Shape/Drive
-    double ja_k = 0.01; // Pinning/Width
-    double ja_c = 0.8; // Reversibility
+    double ja_a = 0.1;
+    double ja_k = 0.01;
+    double ja_c = 0.8;
     JAHysteresis hysteresisEngine;
 };

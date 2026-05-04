@@ -3,8 +3,6 @@
 #include <JuceHeader.h>
 #include "../../PluginProcessor.h"
 #include "../../DSP/Transformers/TransformerModels.h"
-
-// ※プリアンプモデルのヘッダファイルへのパスは、実際の環境に合わせて調整してください
 #include "../../DSP/Algorithms/PreampModels.h" 
 
 class AnalyzerScreen : public juce::Component, public juce::Timer
@@ -21,14 +19,14 @@ private:
     void drawNextFrameOfSpectrum();
     void generateEQCurve();
     void calculateHarmonics();
+
+    // ★ 座標変換関数
     float getPositionForFrequency(float freq, float width);
+    float getFrequencyForPosition(float x, float width); // 新規追加
 
     NeotoPreAudioProcessor& audioProcessor;
 
-    // ==============================================================================
-    // FFT および描画用のバッファとインスタンス
-    // ==============================================================================
-    juce::dsp::FFT fft{ 13 }; // 8192 points (2^13)
+    juce::dsp::FFT fft{ 13 };
     juce::dsp::WindowingFunction<float> window{ 8192, juce::dsp::WindowingFunction<float>::hann };
 
     std::array<float, 8192> circularBuffer{ 0.0f };
@@ -39,15 +37,11 @@ private:
     juce::Path spectrumPath;
     juce::Path eqCurvePath;
 
-    // ==============================================================================
-    // ★ アナライザー描画用の仮想DSPエンジン群
-    // ==============================================================================
     InputTransformer_Nickel    virtualIn_Nickel;
     InputTransformer_Steel     virtualIn_Steel;
     InputTransformer_Iron      virtualIn_Iron;
     InputTransformer_Amorphous virtualIn_Amorphous;
 
-    // ★ 変数名を CPP 側と統一しました
     Preamp_API virtualPreamp_API;
 
     OutputTransformer_Nickel    virtualOut_Nickel;

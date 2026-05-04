@@ -7,7 +7,6 @@ AnalyzerScreen::AnalyzerScreen(NeotoPreAudioProcessor& p) : audioProcessor(p)
     virtualPreamp_API.prepare(fs);
     virtualOut_Nickel.prepare(fs); virtualOut_Steel.prepare(fs); virtualOut_Iron.prepare(fs); virtualOut_Amorphous.prepare(fs);
 
-    // ★ アナライザー専用の仮想エンジンを「リニアモード」に設定
     virtualOut_Nickel.setAnalyzerMode(true);
     virtualOut_Steel.setAnalyzerMode(true);
     virtualOut_Iron.setAnalyzerMode(true);
@@ -40,7 +39,6 @@ void AnalyzerScreen::drawNextFrameOfSpectrum()
         std::copy(circularBuffer.begin() + numReady, circularBuffer.end(), circularBuffer.begin());
 
         int writePos = 8192 - numReady;
-        // ★ オーバーフロー警告回避のための型キャストを追加
         for (int i = 0; i < block1; ++i)
             circularBuffer[static_cast<size_t>(writePos++)] = buffer[static_cast<size_t>(start1) + static_cast<size_t>(i)];
         for (int i = 0; i < block2; ++i)
@@ -54,27 +52,41 @@ void AnalyzerScreen::drawNextFrameOfSpectrum()
         window.multiplyWithWindowingTable(spectrumFftData.data(), 8192);
         fft.performFrequencyOnlyForwardTransform(spectrumFftData.data());
 
-        auto bounds = getLocalBounds().toFloat();
-        spectrumPath.clear();
-        bool firstPoint = true;
-
+        // 1. スムージング処理 (Binベース)
         for (int i = 1; i < 4096; ++i) {
-            float freq = (static_cast<float>(i) * 44100.0f) / 8192.0f;
-            if (freq < 5.0f || freq > 30000.0f) continue;
-
             float mag = spectrumFftData[static_cast<size_t>(i)];
             if (i > 1 && i < 4095) {
                 mag = (spectrumFftData[static_cast<size_t>(i - 1)] + mag * 2.0f + spectrumFftData[static_cast<size_t>(i + 1)]) * 0.25f;
             }
+            if (mag > smoothedSpectrum[static_cast<size_t>(i)]) {
+                smoothedSpectrum[static_cast<size_t>(i)] = mag;
+            }
+            else {
+                smoothedSpectrum[static_cast<size_t>(i)] = smoothedSpectrum[static_cast<size_t>(i)] * 0.85f + mag * 0.15f;
+            }
+        }
 
-            if (mag > smoothedSpectrum[static_cast<size_t>(i)]) smoothedSpectrum[static_cast<size_t>(i)] = mag;
-            else smoothedSpectrum[static_cast<size_t>(i)] = smoothedSpectrum[static_cast<size_t>(i)] * 0.85f + mag * 0.15f;
+        // 2. ★ ピクセルベースの補間描画 (超低域の滑らかさと右端の描画を保証)
+        auto bounds = getLocalBounds().toFloat();
+        spectrumPath.clear();
+        bool firstPoint = true;
 
-            float db = juce::Decibels::gainToDecibels(smoothedSpectrum[static_cast<size_t>(i)]) - 18.0f;
+        for (float x = 0; x <= bounds.getWidth(); x += 1.0f) {
+            float freq = getFrequencyForPosition(x, bounds.getWidth());
+            if (freq < 5.0f || freq > 20000.0f) continue;
+
+            float binExact = freq * 8192.0f / 44100.0f;
+            int bin1 = static_cast<int>(binExact);
+            int bin2 = std::min(bin1 + 1, 4095);
+            float frac = binExact - static_cast<float>(bin1);
+
+            // ゲインの線形補間
+            float mag = smoothedSpectrum[static_cast<size_t>(bin1)] * (1.0f - frac) +
+                smoothedSpectrum[static_cast<size_t>(bin2)] * frac;
+
+            float db = juce::Decibels::gainToDecibels(mag) - 18.0f;
             float y = juce::jmap(db, -90.0f, 36.0f, bounds.getHeight(), 0.0f);
             y = juce::jlimit(0.0f, bounds.getHeight(), y);
-
-            float x = getPositionForFrequency(freq, bounds.getWidth());
 
             if (firstPoint) {
                 spectrumPath.startNewSubPath(x, bounds.getHeight());
@@ -105,26 +117,18 @@ void AnalyzerScreen::generateEQCurve()
     float air = audioProcessor.apvts.getRawParameterValue("air")->load();
     float age = audioProcessor.apvts.getRawParameterValue("age")->load();
 
-    // ==============================================================================
-    // ★ 修正: インパルス蓄積暴走(チカチカ)を防ぐための毎フレーム完全リセット
-    // ==============================================================================
     double fs = 44100.0;
     virtualIn_Nickel.prepare(fs); virtualIn_Steel.prepare(fs); virtualIn_Iron.prepare(fs); virtualIn_Amorphous.prepare(fs);
     virtualPreamp_API.prepare(fs);
     virtualOut_Nickel.prepare(fs); virtualOut_Steel.prepare(fs); virtualOut_Iron.prepare(fs); virtualOut_Amorphous.prepare(fs);
 
-    // ★ 完全なルーティング: ウォームアップ・フェーズ
     for (int i = 0; i < 8192; ++i) {
         float s = 0.0f;
-        // ... (以降は現在のコードのまま) ...
-
         if (inIdx == 1) s = virtualIn_Nickel.processSample(s);
         else if (inIdx == 2) s = virtualIn_Steel.processSample(s);
         else if (inIdx == 3) s = virtualIn_Iron.processSample(s);
         else if (inIdx == 4) s = virtualIn_Amorphous.processSample(s);
-
         if (preIdx == 0) s = virtualPreamp_API.processSample(s, drive, charac, asym, age);
-
         if (outIdx == 1) s = virtualOut_Nickel.processSample(s, color, air, age);
         else if (outIdx == 2) s = virtualOut_Steel.processSample(s, color, air, age);
         else if (outIdx == 3) s = virtualOut_Iron.processSample(s, color, air, age);
@@ -136,55 +140,62 @@ void AnalyzerScreen::generateEQCurve()
 
     for (int i = 0; i < 8192; ++i) {
         float s = eqFftData[static_cast<size_t>(i)];
-
         if (inIdx == 1) s = virtualIn_Nickel.processSample(s);
         else if (inIdx == 2) s = virtualIn_Steel.processSample(s);
         else if (inIdx == 3) s = virtualIn_Iron.processSample(s);
         else if (inIdx == 4) s = virtualIn_Amorphous.processSample(s);
-
         if (preIdx == 0) s = virtualPreamp_API.processSample(s, drive, charac, asym, age);
-
         if (outIdx == 1) s = virtualOut_Nickel.processSample(s, color, air, age);
         else if (outIdx == 2) s = virtualOut_Steel.processSample(s, color, air, age);
         else if (outIdx == 3) s = virtualOut_Iron.processSample(s, color, air, age);
         else if (outIdx == 4) s = virtualOut_Amorphous.processSample(s, color, air, age);
-
         eqFftData[static_cast<size_t>(i)] = s;
     }
 
     fft.performRealOnlyForwardTransform(eqFftData.data());
 
-    auto bounds = getLocalBounds().toFloat();
-    eqCurvePath.clear();
-    bool firstPoint = true;
+    // 1. 各Binのゲインを事前計算
+    std::array<float, 4096> eqMag = { 0.0f };
     const float delaySamples = 0.5f;
-
     for (int i = 1; i < 4096; ++i) {
-        float freq = (static_cast<float>(i) * 44100.0f) / 8192.0f;
-        if (freq < 5.0f || freq > 30000.0f) continue;
-
-        // ★ オーバーフロー警告回避
         float re = eqFftData[static_cast<size_t>(i) * 2];
         float im = eqFftData[static_cast<size_t>(i) * 2 + 1];
-
         float theta = juce::MathConstants<float>::twoPi * static_cast<float>(i) * delaySamples / 8192.0f;
         float cosTheta = std::cos(theta);
         float sinTheta = std::sin(theta);
-
         float reFlat = re * cosTheta - im * sinTheta;
         float imFlat = re * sinTheta + im * cosTheta;
-        float mag = std::sqrt(reFlat * reFlat + imFlat * imFlat);
+        eqMag[static_cast<size_t>(i)] = std::sqrt(reFlat * reFlat + imFlat * imFlat);
+    }
+
+    // 2. ★ ピクセルベースの補間描画 (究極の滑らかさ)
+    auto bounds = getLocalBounds().toFloat();
+    eqCurvePath.clear();
+    bool firstPoint = true;
+
+    for (float x = 0; x <= bounds.getWidth(); x += 1.0f) {
+        float freq = getFrequencyForPosition(x, bounds.getWidth());
+        if (freq < 5.0f || freq > 22050.0f) continue;
+
+        float binExact = freq * 8192.0f / 44100.0f;
+        int bin1 = static_cast<int>(binExact);
+        int bin2 = std::min(bin1 + 1, 4095);
+        float frac = binExact - static_cast<float>(bin1);
+
+        float mag = eqMag[static_cast<size_t>(bin1)] * (1.0f - frac) +
+            eqMag[static_cast<size_t>(bin2)] * frac;
 
         float db = juce::Decibels::gainToDecibels(mag) - juce::Decibels::gainToDecibels(1.0f);
         float y = juce::jmap(db, -24.0f, 24.0f, bounds.getHeight(), 0.0f);
         y = juce::jlimit(0.0f, bounds.getHeight(), y);
-        float x = getPositionForFrequency(freq, bounds.getWidth());
 
         if (firstPoint) {
             eqCurvePath.startNewSubPath(x, y);
             firstPoint = false;
         }
-        else eqCurvePath.lineTo(x, y);
+        else {
+            eqCurvePath.lineTo(x, y);
+        }
     }
 }
 
@@ -205,37 +216,61 @@ void AnalyzerScreen::calculateHarmonics()
     float driveFactor = drive / 100.0f;
     float colorFactor = color / 100.0f;
 
+    // プリアンプセクションの基本倍音
     float evenLvl = driveFactor * totalEvenDrive * 0.8f;
     float oddLvl = driveFactor * mixOdd * 0.8f;
 
+    // ★ 出力トランスの物理特性・選択状態による倍音計算の拡張
     if (outIdx == 1) {
+        // Nickel (J-Aモデル): Colorを上げると非線形性が強まり、高次倍音が急増する
         oddLvl += (colorFactor * colorFactor) * 1.5f;
         evenLvl += colorFactor * 0.2f;
     }
     else if (outIdx == 2 || outIdx == 3) {
-        oddLvl += colorFactor * 0.6f;
-        evenLvl += colorFactor * 0.3f;
+        // Steel / Iron (Tellinenモデル): 
+        // Color 0 の時点でも、実機トランス特有の「通しただけで太くなる」質感をUIに反映
+        oddLvl += 0.15f + colorFactor * 0.6f;
+        evenLvl += 0.05f + colorFactor * 0.3f;
+    }
+    else if (outIdx == 4) {
+        // Amorphous: 
+        // クリーンな特性だが、Colorを上げると急峻なハードクリップが発生する特性を表現
+        oddLvl += (colorFactor * colorFactor * colorFactor) * 2.0f;
     }
 
     evenLvl = std::clamp(evenLvl, 0.0f, 1.5f);
     oddLvl = std::clamp(oddLvl, 0.0f, 1.5f);
 
-    audioProcessor.harmonicLevels[0].store(100.0f);
+    // 描画用アトミック変数へのストア
+    audioProcessor.harmonicLevels[0].store(100.0f); // Root
+
+    // 偶数次倍音
     audioProcessor.harmonicLevels[1].store(evenLvl * 45.0f);
     audioProcessor.harmonicLevels[3].store(evenLvl * 20.0f);
     audioProcessor.harmonicLevels[5].store(evenLvl * 10.0f);
 
+    // 奇数次倍音
     audioProcessor.harmonicLevels[2].store(oddLvl * 35.0f);
     audioProcessor.harmonicLevels[4].store(oddLvl * 15.0f);
     audioProcessor.harmonicLevels[6].store(oddLvl * 8.0f);
 }
 
+// ★ ナイキスト周波数(22.05kHz)を右端の基準とする
 float AnalyzerScreen::getPositionForFrequency(float freq, float width)
 {
     const float minFreq = 5.0f;
-    const float maxFreq = 30000.0f;
+    const float maxFreq = 20000.0f;
     float normalized = std::log10(freq / minFreq) / std::log10(maxFreq / minFreq);
     return normalized * width;
+}
+
+// ★ X座標から周波数を逆算する関数
+float AnalyzerScreen::getFrequencyForPosition(float x, float width)
+{
+    const float minFreq = 5.0f;
+    const float maxFreq = 20000.0f;
+    float normalized = x / width;
+    return minFreq * std::pow(maxFreq / minFreq, normalized);
 }
 
 void AnalyzerScreen::paint(juce::Graphics& g)
@@ -247,28 +282,26 @@ void AnalyzerScreen::paint(juce::Graphics& g)
     g.setColour(juce::Colours::black.withAlpha(0.5f));
     g.drawRoundedRectangle(bounds.reduced(1.0f), 6.0f, 2.0f);
 
+    // ★ グリッドの描画
     g.setColour(juce::Colour(0xff1c2a30));
-
-    // ★ 周波数ラベルに 30k を追加
-    std::vector<float> freqs = { 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 30000 };
+    std::vector<float> freqs = { 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000 };
     for (float freq : freqs) {
         float x = getPositionForFrequency(freq, bounds.getWidth());
         g.drawVerticalLine(static_cast<int>(x), 0.0f, bounds.getHeight());
     }
 
-    // ★ 水平グリッド線と dB スケールの描画
     g.setFont(10.0f);
     for (int i = 1; i <= 7; ++i) {
         float y = bounds.getHeight() * ((float)i / 8.0f);
         g.setColour(juce::Colour(0xff1c2a30));
         g.drawHorizontalLine(static_cast<int>(y), 0.0f, bounds.getWidth());
 
-        // EQカーブのスケール(-24dB 〜 +24dB)に基づくテキスト描画
         float db = juce::jmap(y, 0.0f, bounds.getHeight(), 24.0f, -24.0f);
         g.setColour(juce::Colours::grey.withAlpha(0.7f));
         g.drawText(juce::String(std::round(db)) + " dB", 4, static_cast<int>(y) - 14, 40, 12, juce::Justification::left);
     }
 
+    // スペクトラムの描画
     if (!spectrumPath.isEmpty()) {
         juce::ColourGradient specGrad(juce::Colour(0xffff88a3), 0, 0, juce::Colour(0xffaa88ff), bounds.getWidth(), 0, false);
         specGrad.addColour(0.2f, juce::Colour(0xffffee88));
@@ -283,11 +316,12 @@ void AnalyzerScreen::paint(juce::Graphics& g)
         g.fillRect(bounds);
     }
 
+    // EQカーブの描画
     g.setColour(juce::Colours::white);
     g.strokePath(eqCurvePath, juce::PathStrokeType(2.5f, juce::PathStrokeType::curved));
 
     g.setColour(juce::Colours::lightgrey);
-    std::vector<juce::String> labels = { "5", "10", "20", "50", "100", "200", "500", "1k", "2k", "5k", "10k", "20k", "30k" };
+    std::vector<juce::String> labels = { "5", "10", "20", "50", "100", "200", "500", "1k", "2k", "5k", "10k", "20k" };
     for (size_t i = 0; i < freqs.size(); ++i) {
         float x = getPositionForFrequency(freqs[i], bounds.getWidth());
         g.drawText(labels[i], static_cast<int>(x) + 2, static_cast<int>(bounds.getHeight()) - 16, 30, 12, juce::Justification::left);
