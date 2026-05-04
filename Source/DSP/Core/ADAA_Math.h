@@ -30,4 +30,16 @@ namespace ADAA_Math
     // 上記関数の第1次積分
     double F1_chebyshev_odd(double x);
 
+    // ==============================================================================
+    // ★ 新規追加: 入力トランス素材別の非線形関数
+    // ==============================================================================
+
+    // Steel用: 緩やかな対称ソフトクリップ (糊と温かみ)
+    double fx_steel(double x);
+    double F1_steel(double x);
+
+    // Iron用: やや非対称でパンチのあるサチュレーション
+    double fx_iron(double x);
+    double F1_iron(double x);
+
 } // namespace ADAA_Math

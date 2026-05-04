@@ -21,17 +21,33 @@ private:
     double lastInputADAA = 0.0;
 };
 
-// 以降はプロトタイプ空箱
 class InputTransformer_Steel : public IInputTransformerEngine {
-public: void prepare(double) override {} float processSample(float input) override { return input; }
-};
-class InputTransformer_Iron : public IInputTransformerEngine {
-public: void prepare(double) override {} float processSample(float input) override { return input; }
-};
-class InputTransformer_Amorphous : public IInputTransformerEngine {
-public: void prepare(double) override {} float processSample(float input) override { return input; }
+public:
+    void prepare(double sampleRate) override;
+    float processSample(float input) override;
+private:
+    double fs = 44100.0;
+    double lastInputADAA = 0.0;
+    double hpfState = 0.0, lastInput = 0.0, alphaHpf = 0.0; // 低域のフェイズシフト用
 };
 
+class InputTransformer_Iron : public IInputTransformerEngine {
+public:
+    void prepare(double sampleRate) override;
+    float processSample(float input) override;
+private:
+    double fs = 44100.0;
+    double lastInputADAA = 0.0;
+};
+
+class InputTransformer_Amorphous : public IInputTransformerEngine {
+public:
+    void prepare(double sampleRate) override;
+    float processSample(float input) override;
+private:
+    double fs = 44100.0;
+    double lastInputADAA = 0.0;
+};
 
 //==============================================================================
 // OUTPUT TRANSFORMERS (大信号・4引数)

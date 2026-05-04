@@ -30,6 +30,76 @@ float InputTransformer_Nickel::processSample(float input)
 }
 
 //==============================================================================
+// ★ 新規追加: Steel, Iron, Amorphous の実装
+//==============================================================================
+
+void InputTransformer_Steel::prepare(double sampleRate) {
+    fs = sampleRate;
+    lastInputADAA = 0.0;
+    hpfState = 0.0; lastInput = 0.0;
+    // 15Hzのハイパスフィルターで、トランス特有の低域の位相ズレを再現
+    alphaHpf = std::exp(-juce::MathConstants<double>::twoPi * 15.0 / fs);
+}
+
+float InputTransformer_Steel::processSample(float input) {
+    double dInput = static_cast<double>(input);
+
+    // 1. 低域フェイズシフト (HPF)
+    double hpfOut = dInput - lastInput + alphaHpf * hpfState;
+    hpfState = hpfOut; lastInput = dInput;
+
+    // 2. ADAA Softclip (Steel)
+    double softclipOut = 0.0;
+    double dx = hpfOut - lastInputADAA;
+    if (std::abs(dx) < 1e-8) softclipOut = ADAA_Math::fx_steel((hpfOut + lastInputADAA) * 0.5);
+    else softclipOut = (ADAA_Math::F1_steel(hpfOut) - ADAA_Math::F1_steel(lastInputADAA)) / dx;
+
+    lastInputADAA = hpfOut;
+    return static_cast<float>(softclipOut);
+}
+
+void InputTransformer_Iron::prepare(double sampleRate) {
+    fs = sampleRate; lastInputADAA = 0.0;
+}
+
+float InputTransformer_Iron::processSample(float input) {
+    double dInput = static_cast<double>(input);
+    double softclipOut = 0.0;
+    double dx = dInput - lastInputADAA;
+
+    if (std::abs(dx) < 1e-8) softclipOut = ADAA_Math::fx_iron((dInput + lastInputADAA) * 0.5);
+    else softclipOut = (ADAA_Math::F1_iron(dInput) - ADAA_Math::F1_iron(lastInputADAA)) / dx;
+
+    lastInputADAA = dInput;
+    return static_cast<float>(softclipOut);
+}
+
+void InputTransformer_Amorphous::prepare(double sampleRate) {
+    fs = sampleRate; lastInputADAA = 0.0;
+}
+
+float InputTransformer_Amorphous::processSample(float input) {
+    double dInput = static_cast<double>(input);
+    double softclipOut = 0.0;
+    double dx = dInput - lastInputADAA;
+
+    // Amorphousは超広帯域・超低歪みのため、ハードクリップの閾値を高く設定してクリーンに保つ
+    auto fx_amorph = [](double x) { return std::clamp(x, -4.0, 4.0); };
+    auto F1_amorph = [](double x) {
+        if (x > 4.0) return 4.0 * x - 8.0;
+        if (x < -4.0) return -4.0 * x - 8.0;
+        return 0.5 * x * x;
+        };
+
+    if (std::abs(dx) < 1e-8) softclipOut = fx_amorph((dInput + lastInputADAA) * 0.5);
+    else softclipOut = (F1_amorph(dInput) - F1_amorph(lastInputADAA)) / dx;
+
+    lastInputADAA = dInput;
+    return static_cast<float>(softclipOut);
+}
+
+
+//==============================================================================
 // Output: Steel の実装 (提供コードの完全移植)
 //==============================================================================
 void OutputTransformer_Steel::prepare(double sampleRate)

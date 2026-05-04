@@ -21,10 +21,12 @@ DriveSection::DriveSection(NeotoPreAudioProcessor& p) : audioProcessor(p)
     asymAttach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(audioProcessor.apvts, "asymmetry", asymSlider);
     preampModelAttach = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(audioProcessor.apvts, "preamp_model", preampModelCombo);
 
-    // ダイナミックカラー
-    auto updateColors = [this] {
+    // ★ 変更: ダイナミックカラーの更新と、スマート・デフォルト機能（自動トランス切り替え）の統合
+    auto updateColorsAndRouting = [this] {
         int id = preampModelCombo.getSelectedItemIndex();
         juce::Colour c = juce::Colours::cyan;
+
+        // 1. カラーの更新
         if (id == 0) c = juce::Colour(0xff00d4ff); // API: Blue
         else if (id == 1) c = juce::Colour(0xffff5555); // Neve: Red
         else if (id == 2) c = juce::Colour(0xffffaa00); // Tube: Orange
@@ -36,9 +38,41 @@ DriveSection::DriveSection(NeotoPreAudioProcessor& p) : audioProcessor(p)
         charSlider.setColour(juce::Slider::rotarySliderFillColourId, c);
         asymSlider.setColour(juce::Slider::rotarySliderFillColourId, c);
         repaint();
+
+        // 2. スマート・デフォルト (Smart Defaulting)
+        auto* inTransParam = audioProcessor.apvts.getParameter("in_trans_type");
+        auto* outTransParam = audioProcessor.apvts.getParameter("out_trans_type");
+
+        if (inTransParam && outTransParam) {
+            // (0:None, 1:Nickel, 2:Steel, 3:Iron, 4:Amorphous)
+            if (id == 0) { // API Style
+                inTransParam->setValueNotifyingHost(inTransParam->convertTo0to1(3)); // Iron
+                outTransParam->setValueNotifyingHost(outTransParam->convertTo0to1(2)); // Steel
+            }
+            else if (id == 1) { // Neve Style
+                inTransParam->setValueNotifyingHost(inTransParam->convertTo0to1(1)); // Nickel
+                outTransParam->setValueNotifyingHost(outTransParam->convertTo0to1(2)); // Steel
+            }
+            else if (id == 2) { // Vintage Tube
+                inTransParam->setValueNotifyingHost(inTransParam->convertTo0to1(1)); // Nickel
+                outTransParam->setValueNotifyingHost(outTransParam->convertTo0to1(1)); // Nickel
+            }
+            else { // SSL / Modern 1 / Modern 2
+                inTransParam->setValueNotifyingHost(inTransParam->convertTo0to1(0)); // None
+                outTransParam->setValueNotifyingHost(outTransParam->convertTo0to1(0)); // None
+            }
+        }
         };
-    preampModelCombo.onChange = updateColors;
-    updateColors();
+
+    preampModelCombo.onChange = updateColorsAndRouting;
+
+    // UI初期化時のカラー設定のみ実行 (パラメータの書き換えはトリガーしない)
+    int initialId = preampModelCombo.getSelectedItemIndex();
+    juce::Colour initialColor = (initialId == 0) ? juce::Colour(0xff00d4ff) :
+        (initialId == 1) ? juce::Colour(0xffff5555) : juce::Colours::cyan;
+    driveSlider.setColour(juce::Slider::rotarySliderFillColourId, initialColor);
+    charSlider.setColour(juce::Slider::rotarySliderFillColourId, initialColor);
+    asymSlider.setColour(juce::Slider::rotarySliderFillColourId, initialColor);
 }
 
 DriveSection::~DriveSection()

@@ -138,4 +138,53 @@ namespace ADAA_Math
         }
     }
 
+    // ==============================================================================
+    // ★ 新規追加: 入力トランス素材別の非線形関数
+    // ==============================================================================
+
+    double fx_steel(double x)
+    {
+        const double limit = 1.5;
+        const double max_val = limit - 0.1 * (limit * limit * limit);
+        if (x > limit) return max_val;
+        if (x < -limit) return -max_val;
+        return x - 0.1 * (x * x * x);
+    }
+
+    double F1_steel(double x)
+    {
+        const double limit = 1.5;
+        const double max_val = limit - 0.1 * (limit * limit * limit); // 1.1625
+        const double C = -0.384375; // 連続性を保つための積分定数
+        if (x > limit) return max_val * x + C;
+        if (x < -limit) return -max_val * x + C;
+        double x2 = x * x;
+        return (x2 / 2.0) - 0.025 * (x2 * x2);
+    }
+
+    double fx_iron(double x)
+    {
+        const double limit_pos = 1.5;
+        const double limit_neg = -1.2;
+        const double max_pos = limit_pos + 0.05 * (limit_pos * limit_pos) - 0.15 * (limit_pos * limit_pos * limit_pos); // 1.10625
+        const double max_neg = limit_neg + 0.05 * (limit_neg * limit_neg) - 0.15 * (limit_neg * limit_neg * limit_neg); // -0.8688
+        if (x > limit_pos) return max_pos;
+        if (x < limit_neg) return max_neg;
+        return x + 0.05 * (x * x) - 0.15 * (x * x * x);
+    }
+
+    double F1_iron(double x)
+    {
+        const double limit_pos = 1.5;
+        const double limit_neg = -1.2;
+        const double max_pos = 1.10625;
+        const double max_neg = -0.8688;
+        const double C_pos = -0.34453125;
+        const double C_neg = -0.25056;
+        if (x > limit_pos) return max_pos * x + C_pos;
+        if (x < limit_neg) return max_neg * x + C_neg;
+        double x2 = x * x;
+        return (x2 / 2.0) + (0.05 / 3.0) * (x2 * x) - (0.15 / 4.0) * (x2 * x2);
+    }
+
 } // namespace ADAA_Math
