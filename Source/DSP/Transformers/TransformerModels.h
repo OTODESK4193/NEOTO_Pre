@@ -163,6 +163,9 @@ public:
     float processSample(float input, float, float, float) override { return input; }
 };
 
+// ==============================================================================
+// Output: Amorphous クラス (クリーン & ハードクリップ)
+// ==============================================================================
 class OutputTransformer_Amorphous : public IOutputTransformerEngine {
 public:
     void prepare(double sampleRate) override;
@@ -172,23 +175,13 @@ public:
 private:
     double fs = 44100.0;
     bool isAnalyzerMode = false;
-
-    // ★ 状態管理用変数
-    float lastColorParam = -1.0f;
-    float lastAirParam = -1.0f;
-    float lastAgeParam = -1.0f; // 追加：Ageの変更検知用
-
-    double threshold = 1.0;
-    double driveGain = 1.0;
-
-    // ★ Biquad (Air) 用の状態変数
+    float lastColorParam = -1.0f, lastAirParam = -1.0f, lastAgeParam = -1.0f;
+    double threshold = 5.0, driveGain = 1.0;
     double x1 = 0.0, x2 = 0.0, y1 = 0.0, y2 = 0.0;
     double b0 = 1.0, b1 = 0.0, b2 = 0.0, a1 = 0.0, a2 = 0.0;
+    double lpfState = 0.0, alphaLpf = 0.0;
+}; 
 
-    // ★ Age (LPF) 用の状態変数
-    double lpfState = 0.0;      // 追加：LPFの遅延要素
-    double alphaLpf = 0.0;      // 追加：LPFの係数
-};
 class OutputTransformer_Steel : public IOutputTransformerEngine {
 public:
     void prepare(double sampleRate) override;
@@ -230,18 +223,26 @@ public:
     void prepare(double sampleRate) override;
     float processSample(float input, float colorParam, float airParam, float ageParam) override;
     void setAnalyzerMode(bool isAnalyzer) { isAnalyzerMode = isAnalyzer; }
+
 private:
     double fs = 44100.0;
     bool isAnalyzerMode = false;
-    double hpfState = 0.0, lastInput = 0.0, lpfState = 0.0;
+
+    // ★ パラメータ・状態保持用
+    float lastColorParam = -1.0f;
+    float lastAirParam = -1.0f;
+    float lastAgeParam = -1.0f;
+
+    // ★ J-Aモデル用パラメータ (これが「定義されていない」と言われている正体です)
+    double ja_a = 4.0;
+    double ja_k = 0.0001;
+    double ja_c = 0.999;
+
+    // ★ J-Aヒステリシスエンジン本体
+    JAHysteresis hysteresisEngine;
+
+    // フィルター・DC除去用の状態変数
+    double hpfState = 0.0, lastInput = 0.0, lpfState = 0.0, alphaHpf = 0.0, alphaLpf = 0.0;
     double x1 = 0.0, x2 = 0.0, y1 = 0.0, y2 = 0.0;
     double b0 = 1.0, b1 = 0.0, b2 = 0.0, a1 = 0.0, a2 = 0.0;
-
-    float lastColorParam = -1.0f, lastAirParam = -1.0f, lastAgeParam = -1.0f;
-    double alphaHpf = 0.0, alphaLpf = 0.0;
-
-    double ja_a = 0.1;
-    double ja_k = 0.01;
-    double ja_c = 0.8;
-    JAHysteresis hysteresisEngine;
 };
