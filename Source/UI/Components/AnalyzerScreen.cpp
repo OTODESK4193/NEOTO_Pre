@@ -2,8 +2,16 @@
 
 AnalyzerScreen::AnalyzerScreen(NeotoPreAudioProcessor& p) : audioProcessor(p)
 {
-    virtualPreamp_API.prepare(44100.0);
-    virtualOut_Steel.prepare(44100.0);
+    double fs = 44100.0;
+    virtualIn_Nickel.prepare(fs); virtualIn_Steel.prepare(fs); virtualIn_Iron.prepare(fs); virtualIn_Amorphous.prepare(fs);
+    virtualPreamp_API.prepare(fs);
+    virtualOut_Nickel.prepare(fs); virtualOut_Steel.prepare(fs); virtualOut_Iron.prepare(fs); virtualOut_Amorphous.prepare(fs);
+
+    // ★ アナライザー専用の仮想エンジンを「リニアモード」に設定
+    virtualOut_Nickel.setAnalyzerMode(true);
+    virtualOut_Steel.setAnalyzerMode(true);
+    virtualOut_Iron.setAnalyzerMode(true);
+
     startTimerHz(30);
 }
 
@@ -32,8 +40,11 @@ void AnalyzerScreen::drawNextFrameOfSpectrum()
         std::copy(circularBuffer.begin() + numReady, circularBuffer.end(), circularBuffer.begin());
 
         int writePos = 8192 - numReady;
-        for (int i = 0; i < block1; ++i) circularBuffer[writePos++] = buffer[(size_t)(start1 + i)];
-        for (int i = 0; i < block2; ++i) circularBuffer[writePos++] = buffer[(size_t)(start2 + i)];
+        // ★ オーバーフロー警告回避のための型キャストを追加
+        for (int i = 0; i < block1; ++i)
+            circularBuffer[static_cast<size_t>(writePos++)] = buffer[static_cast<size_t>(start1) + static_cast<size_t>(i)];
+        for (int i = 0; i < block2; ++i)
+            circularBuffer[static_cast<size_t>(writePos++)] = buffer[static_cast<size_t>(start2) + static_cast<size_t>(i)];
 
         fifo.finishedRead(numReady);
 
@@ -48,19 +59,18 @@ void AnalyzerScreen::drawNextFrameOfSpectrum()
         bool firstPoint = true;
 
         for (int i = 1; i < 4096; ++i) {
-            float freq = (i * 44100.0f) / 8192.0f;
-            if (freq < 5.0f || freq > 20000.0f) continue; // ★ 5Hzから描画
+            float freq = (static_cast<float>(i) * 44100.0f) / 8192.0f;
+            if (freq < 5.0f || freq > 30000.0f) continue;
 
-            float mag = spectrumFftData[i];
-
+            float mag = spectrumFftData[static_cast<size_t>(i)];
             if (i > 1 && i < 4095) {
-                mag = (spectrumFftData[i - 1] + mag * 2.0f + spectrumFftData[i + 1]) * 0.25f;
+                mag = (spectrumFftData[static_cast<size_t>(i - 1)] + mag * 2.0f + spectrumFftData[static_cast<size_t>(i + 1)]) * 0.25f;
             }
 
-            if (mag > smoothedSpectrum[i]) smoothedSpectrum[i] = mag;
-            else smoothedSpectrum[i] = smoothedSpectrum[i] * 0.85f + mag * 0.15f;
+            if (mag > smoothedSpectrum[static_cast<size_t>(i)]) smoothedSpectrum[static_cast<size_t>(i)] = mag;
+            else smoothedSpectrum[static_cast<size_t>(i)] = smoothedSpectrum[static_cast<size_t>(i)] * 0.85f + mag * 0.15f;
 
-            float db = juce::Decibels::gainToDecibels(smoothedSpectrum[i]) - 18.0f;
+            float db = juce::Decibels::gainToDecibels(smoothedSpectrum[static_cast<size_t>(i)]) - 18.0f;
             float y = juce::jmap(db, -90.0f, 36.0f, bounds.getHeight(), 0.0f);
             y = juce::jlimit(0.0f, bounds.getHeight(), y);
 
@@ -84,71 +94,85 @@ void AnalyzerScreen::drawNextFrameOfSpectrum()
 
 void AnalyzerScreen::generateEQCurve()
 {
-    // ★ 仮想DSPエンジンのステートを完全にリセット
-    virtualPreamp_API.prepare(44100.0);
-    virtualOut_Steel.prepare(44100.0);
-
+    int inIdx = (int)audioProcessor.apvts.getRawParameterValue("in_trans_type")->load();
     int preIdx = (int)audioProcessor.apvts.getRawParameterValue("preamp_model")->load();
+    int outIdx = (int)audioProcessor.apvts.getRawParameterValue("out_trans_type")->load();
+
     float drive = audioProcessor.apvts.getRawParameterValue("drive")->load();
     float charac = audioProcessor.apvts.getRawParameterValue("character")->load();
     float asym = audioProcessor.apvts.getRawParameterValue("asymmetry")->load();
-
-    int outIdx = (int)audioProcessor.apvts.getRawParameterValue("out_trans_type")->load();
     float color = audioProcessor.apvts.getRawParameterValue("color")->load();
     float air = audioProcessor.apvts.getRawParameterValue("air")->load();
     float age = audioProcessor.apvts.getRawParameterValue("age")->load();
 
     // ==============================================================================
-    // ★ ウォームアップ・フェーズ (Pre-roll)
-    // 無音(0.0)を入力し、Asymmetry等によるDCバイアスの過渡応答を完全に落ち着かせる
+    // ★ 修正: インパルス蓄積暴走(チカチカ)を防ぐための毎フレーム完全リセット
     // ==============================================================================
+    double fs = 44100.0;
+    virtualIn_Nickel.prepare(fs); virtualIn_Steel.prepare(fs); virtualIn_Iron.prepare(fs); virtualIn_Amorphous.prepare(fs);
+    virtualPreamp_API.prepare(fs);
+    virtualOut_Nickel.prepare(fs); virtualOut_Steel.prepare(fs); virtualOut_Iron.prepare(fs); virtualOut_Amorphous.prepare(fs);
+
+    // ★ 完全なルーティング: ウォームアップ・フェーズ
     for (int i = 0; i < 8192; ++i) {
         float s = 0.0f;
+        // ... (以降は現在のコードのまま) ...
+
+        if (inIdx == 1) s = virtualIn_Nickel.processSample(s);
+        else if (inIdx == 2) s = virtualIn_Steel.processSample(s);
+        else if (inIdx == 3) s = virtualIn_Iron.processSample(s);
+        else if (inIdx == 4) s = virtualIn_Amorphous.processSample(s);
+
         if (preIdx == 0) s = virtualPreamp_API.processSample(s, drive, charac, asym, age);
-        if (outIdx == 2) s = virtualOut_Steel.processSample(s, color, air, age);
+
+        if (outIdx == 1) s = virtualOut_Nickel.processSample(s, color, air, age);
+        else if (outIdx == 2) s = virtualOut_Steel.processSample(s, color, air, age);
+        else if (outIdx == 3) s = virtualOut_Iron.processSample(s, color, air, age);
+        else if (outIdx == 4) s = virtualOut_Amorphous.processSample(s, color, air, age);
     }
 
-    // ==============================================================================
-    // インパルス応答 (IR) の生成
-    // ==============================================================================
     std::fill(eqFftData.begin(), eqFftData.end(), 0.0f);
     eqFftData[0] = 1.0f;
 
     for (int i = 0; i < 8192; ++i) {
-        float s = eqFftData[i];
+        float s = eqFftData[static_cast<size_t>(i)];
+
+        if (inIdx == 1) s = virtualIn_Nickel.processSample(s);
+        else if (inIdx == 2) s = virtualIn_Steel.processSample(s);
+        else if (inIdx == 3) s = virtualIn_Iron.processSample(s);
+        else if (inIdx == 4) s = virtualIn_Amorphous.processSample(s);
+
         if (preIdx == 0) s = virtualPreamp_API.processSample(s, drive, charac, asym, age);
-        if (outIdx == 2) s = virtualOut_Steel.processSample(s, color, air, age);
-        eqFftData[i] = s;
+
+        if (outIdx == 1) s = virtualOut_Nickel.processSample(s, color, air, age);
+        else if (outIdx == 2) s = virtualOut_Steel.processSample(s, color, air, age);
+        else if (outIdx == 3) s = virtualOut_Iron.processSample(s, color, air, age);
+        else if (outIdx == 4) s = virtualOut_Amorphous.processSample(s, color, air, age);
+
+        eqFftData[static_cast<size_t>(i)] = s;
     }
 
-    // ★ 位相情報を保持するため、複素数出力用のRealOnly Forward Transformを使用
     fft.performRealOnlyForwardTransform(eqFftData.data());
 
     auto bounds = getLocalBounds().toFloat();
     eqCurvePath.clear();
     bool firstPoint = true;
-
-    // ★ 1次ADAAの遅延量 (0.5サンプル)
     const float delaySamples = 0.5f;
 
     for (int i = 1; i < 4096; ++i) {
-        float freq = (i * 44100.0f) / 8192.0f;
-        if (freq < 5.0f || freq > 20000.0f) continue; // ★ 5Hzから描画
+        float freq = (static_cast<float>(i) * 44100.0f) / 8192.0f;
+        if (freq < 5.0f || freq > 30000.0f) continue;
 
-        // 複素スペクトルからの実部・虚部の取得
-        float re = eqFftData[i * 2];
-        float im = eqFftData[i * 2 + 1];
+        // ★ オーバーフロー警告回避
+        float re = eqFftData[static_cast<size_t>(i) * 2];
+        float im = eqFftData[static_cast<size_t>(i) * 2 + 1];
 
-        // 位相逆回転の適用 (Phase Rotation Cancellation)
         float theta = juce::MathConstants<float>::twoPi * static_cast<float>(i) * delaySamples / 8192.0f;
         float cosTheta = std::cos(theta);
         float sinTheta = std::sin(theta);
 
-        // 複素数乗算: (re + j*im) * (cosTheta + j*sinTheta)
         float reFlat = re * cosTheta - im * sinTheta;
         float imFlat = re * sinTheta + im * cosTheta;
-
-        // 相殺後の正確な振幅(Magnitude)を算出
         float mag = std::sqrt(reFlat * reFlat + imFlat * imFlat);
 
         float db = juce::Decibels::gainToDecibels(mag) - juce::Decibels::gainToDecibels(1.0f);
@@ -169,38 +193,47 @@ void AnalyzerScreen::calculateHarmonics()
     float drive = audioProcessor.apvts.getRawParameterValue("drive")->load();
     float charac = audioProcessor.apvts.getRawParameterValue("character")->load();
     float asym = audioProcessor.apvts.getRawParameterValue("asymmetry")->load();
+    int outIdx = (int)audioProcessor.apvts.getRawParameterValue("out_trans_type")->load();
+    float color = audioProcessor.apvts.getRawParameterValue("color")->load();
 
-    // ★ 変更: Character パラメータから奇数次・偶数次のブレンド比率を算出 (0.0 〜 1.0)
-    // 0 = 奇数次主体 (mixOdd = 1.0, mixEven = 0.0)
-    // 100 = 偶数次主体 (mixOdd = 0.0, mixEven = 1.0)
     float charNormalized = charac / 100.0f;
     float mixEven = charNormalized;
     float mixOdd = 1.0f - charNormalized;
-
-    // Asymmetryノブも偶数次倍音（非対称クリップ）を生成するため、効果を合算する
     float asymNormalized = asym / 100.0f;
     float totalEvenDrive = std::clamp(mixEven + asymNormalized, 0.0f, 1.0f);
 
     float driveFactor = drive / 100.0f;
+    float colorFactor = color / 100.0f;
 
-    // 基音 (1st)
+    float evenLvl = driveFactor * totalEvenDrive * 0.8f;
+    float oddLvl = driveFactor * mixOdd * 0.8f;
+
+    if (outIdx == 1) {
+        oddLvl += (colorFactor * colorFactor) * 1.5f;
+        evenLvl += colorFactor * 0.2f;
+    }
+    else if (outIdx == 2 || outIdx == 3) {
+        oddLvl += colorFactor * 0.6f;
+        evenLvl += colorFactor * 0.3f;
+    }
+
+    evenLvl = std::clamp(evenLvl, 0.0f, 1.5f);
+    oddLvl = std::clamp(oddLvl, 0.0f, 1.5f);
+
     audioProcessor.harmonicLevels[0].store(100.0f);
+    audioProcessor.harmonicLevels[1].store(evenLvl * 45.0f);
+    audioProcessor.harmonicLevels[3].store(evenLvl * 20.0f);
+    audioProcessor.harmonicLevels[5].store(evenLvl * 10.0f);
 
-    // 偶数次 (Even: 2nd, 4th, 6th) - totalEvenDrive と drive に依存
-    audioProcessor.harmonicLevels[1].store(driveFactor * totalEvenDrive * 45.0f);
-    audioProcessor.harmonicLevels[3].store(driveFactor * totalEvenDrive * 20.0f);
-    audioProcessor.harmonicLevels[5].store(driveFactor * totalEvenDrive * 10.0f);
-
-    // 奇数次 (Odd: 3rd, 5th, 7th) - mixOdd と drive に依存
-    audioProcessor.harmonicLevels[2].store(driveFactor * mixOdd * 35.0f);
-    audioProcessor.harmonicLevels[4].store(driveFactor * mixOdd * 15.0f);
-    audioProcessor.harmonicLevels[6].store(driveFactor * mixOdd * 8.0f);
+    audioProcessor.harmonicLevels[2].store(oddLvl * 35.0f);
+    audioProcessor.harmonicLevels[4].store(oddLvl * 15.0f);
+    audioProcessor.harmonicLevels[6].store(oddLvl * 8.0f);
 }
 
 float AnalyzerScreen::getPositionForFrequency(float freq, float width)
 {
-    const float minFreq = 5.0f; // ★ 5Hzに変更
-    const float maxFreq = 20000.0f;
+    const float minFreq = 5.0f;
+    const float maxFreq = 30000.0f;
     float normalized = std::log10(freq / minFreq) / std::log10(maxFreq / minFreq);
     return normalized * width;
 }
@@ -214,19 +247,28 @@ void AnalyzerScreen::paint(juce::Graphics& g)
     g.setColour(juce::Colours::black.withAlpha(0.5f));
     g.drawRoundedRectangle(bounds.reduced(1.0f), 6.0f, 2.0f);
 
-    // ★ グリッド線の描画 (5, 10を追加)
     g.setColour(juce::Colour(0xff1c2a30));
-    std::vector<float> freqs = { 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000 };
+
+    // ★ 周波数ラベルに 30k を追加
+    std::vector<float> freqs = { 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 30000 };
     for (float freq : freqs) {
         float x = getPositionForFrequency(freq, bounds.getWidth());
         g.drawVerticalLine(static_cast<int>(x), 0.0f, bounds.getHeight());
     }
-    for (int i = 1; i < 7; ++i) {
-        float y = bounds.getHeight() * ((float)i / 7);
+
+    // ★ 水平グリッド線と dB スケールの描画
+    g.setFont(10.0f);
+    for (int i = 1; i <= 7; ++i) {
+        float y = bounds.getHeight() * ((float)i / 8.0f);
+        g.setColour(juce::Colour(0xff1c2a30));
         g.drawHorizontalLine(static_cast<int>(y), 0.0f, bounds.getWidth());
+
+        // EQカーブのスケール(-24dB 〜 +24dB)に基づくテキスト描画
+        float db = juce::jmap(y, 0.0f, bounds.getHeight(), 24.0f, -24.0f);
+        g.setColour(juce::Colours::grey.withAlpha(0.7f));
+        g.drawText(juce::String(std::round(db)) + " dB", 4, static_cast<int>(y) - 14, 40, 12, juce::Justification::left);
     }
 
-    // スペクトラム描画
     if (!spectrumPath.isEmpty()) {
         juce::ColourGradient specGrad(juce::Colour(0xffff88a3), 0, 0, juce::Colour(0xffaa88ff), bounds.getWidth(), 0, false);
         specGrad.addColour(0.2f, juce::Colour(0xffffee88));
@@ -241,14 +283,11 @@ void AnalyzerScreen::paint(juce::Graphics& g)
         g.fillRect(bounds);
     }
 
-    // EQカーブ描画
     g.setColour(juce::Colours::white);
     g.strokePath(eqCurvePath, juce::PathStrokeType(2.5f, juce::PathStrokeType::curved));
 
-    // ★ 周波数テキストの描画 (5, 10を追加)
     g.setColour(juce::Colours::lightgrey);
-    g.setFont(10.0f);
-    std::vector<juce::String> labels = { "5", "10", "20", "50", "100", "200", "500", "1k", "2k", "5k", "10k", "20k" };
+    std::vector<juce::String> labels = { "5", "10", "20", "50", "100", "200", "500", "1k", "2k", "5k", "10k", "20k", "30k" };
     for (size_t i = 0; i < freqs.size(); ++i) {
         float x = getPositionForFrequency(freqs[i], bounds.getWidth());
         g.drawText(labels[i], static_cast<int>(x) + 2, static_cast<int>(bounds.getHeight()) - 16, 30, 12, juce::Justification::left);
