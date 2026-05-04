@@ -256,12 +256,18 @@ float OutputTransformer_Nickel::processSample(float input, float colorParam, flo
 		double fcHpf = juce::jmap(curve, 0.0, 1.0, 5.0, 2.0);
 		alphaHpf = std::exp(-juce::MathConstants<double>::twoPi * fcHpf / fs);
 
-		ja_a = juce::jmap(curve, 0.0, 1.0, 4.0, 0.05);
-		ja_k = juce::jmap(curve, 0.0, 1.0, 0.0001, 0.04);
-		ja_c = juce::jmap(curve, 0.0, 1.0, 0.999, 0.45);
+		// =======================================================
+		// ★ リチューニング: Color 0 を「ほぼDry」にする究極のパラメータ
+		// ja_a を 30.0 にすることで、原点付近のカーブを完全に直線化します。
+		// ja_k (ヒステリシス幅) を極小化し、ja_c (可逆率) を 1.0 に限りなく近づけます。
+		// =======================================================
+		ja_a = juce::jmap(curve, 0.0, 1.0, 30.0, 0.05);
+		ja_k = juce::jmap(curve, 0.0, 1.0, 0.00001, 0.04);
+		ja_c = juce::jmap(curve, 0.0, 1.0, 0.9999, 0.45);
 
 		lastColorParam = colorParam;
 	}
+	// ... (以降の Air, Age, DSP処理 はそのまま変更なし) ...
 
 	if (airParam != lastAirParam) {
 		double gainDb = juce::jmap(static_cast<double>(airParam), 0.0, 100.0, 0.0, 6.0);

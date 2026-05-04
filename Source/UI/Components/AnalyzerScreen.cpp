@@ -66,7 +66,7 @@ void AnalyzerScreen::drawNextFrameOfSpectrum()
             }
         }
 
-        // 2. ★ ピクセルベースの補間描画 (超低域の滑らかさと右端の描画を保証)
+        // 2. ピクセルベースの補間描画
         auto bounds = getLocalBounds().toFloat();
         spectrumPath.clear();
         bool firstPoint = true;
@@ -84,6 +84,7 @@ void AnalyzerScreen::drawNextFrameOfSpectrum()
             float mag = smoothedSpectrum[static_cast<size_t>(bin1)] * (1.0f - frac) +
                 smoothedSpectrum[static_cast<size_t>(bin2)] * frac;
 
+            // 表示オフセット (-36dB)
             float db = juce::Decibels::gainToDecibels(mag) - 36.0f;
             float y = juce::jmap(db, -90.0f, 36.0f, bounds.getHeight(), 0.0f);
             y = juce::jlimit(0.0f, bounds.getHeight(), y);
@@ -168,7 +169,7 @@ void AnalyzerScreen::generateEQCurve()
         eqMag[static_cast<size_t>(i)] = std::sqrt(reFlat * reFlat + imFlat * imFlat);
     }
 
-    // 2. ★ ピクセルベースの補間描画 (究極の滑らかさ)
+    // 2. ピクセルベースの補間描画
     auto bounds = getLocalBounds().toFloat();
     eqCurvePath.clear();
     bool firstPoint = true;
@@ -215,7 +216,7 @@ void AnalyzerScreen::calculateHarmonics()
 
     float driveFactor = drive / 100.0f;
 
-    // ★ Colorノブに3次曲線を適用 (0-80%は極めて緩やか、80-100%で急増)
+    // Colorノブに3次曲線を適用
     float colorFactor = color / 100.0f;
     float colorCurve = std::pow(colorFactor, 3.0f);
 
@@ -223,37 +224,28 @@ void AnalyzerScreen::calculateHarmonics()
     float evenLvl = driveFactor * totalEvenDrive * 0.8f;
     float oddLvl = driveFactor * mixOdd * 0.8f;
 
-    // ★ 出力トランスの物理特性に基づく「プロ仕様」のリチューニング
+    // ★ Nickelのプロ仕様リチューニング: Color 0 ではメーターを極限まで沈める
     if (outIdx == 1) {
-        // Nickel (J-Aモデル): 
-        // Color 0 では、熟練の耳だけが感知できるレベル (0.005f) まで引き下げ
-        oddLvl += 0.005f + (colorCurve * 2.0f);
-        evenLvl += 0.002f + (colorCurve * 0.4f);
+        oddLvl += 0.001f + (colorCurve * 2.0f);
+        evenLvl += 0.0005f + (colorCurve * 0.4f);
     }
     else if (outIdx == 2 || outIdx == 3) {
-        // Steel / Iron (Tellinenモデル): 
-        // Color 0 での「通しただけの質感」を 0.015f まで絞り、ノブの後半で実機の飽和を表現
         oddLvl += 0.015f + colorCurve * 1.0f;
         evenLvl += 0.005f + colorCurve * 0.5f;
     }
     else if (outIdx == 4) {
-        // Amorphous: 
-        // クリーンさを極限まで維持しつつ、後半で鋭利なクリップを発生させる
         oddLvl += (colorCurve * colorCurve) * 2.5f;
     }
 
     evenLvl = std::clamp(evenLvl, 0.0f, 1.5f);
     oddLvl = std::clamp(oddLvl, 0.0f, 1.5f);
 
-    // 描画用アトミック変数へのストア
     audioProcessor.harmonicLevels[0].store(100.0f); // Root
 
-    // 偶数次倍音 (2nd, 4th, 6th)
     audioProcessor.harmonicLevels[1].store(evenLvl * 45.0f);
     audioProcessor.harmonicLevels[3].store(evenLvl * 20.0f);
     audioProcessor.harmonicLevels[5].store(evenLvl * 10.0f);
 
-    // 奇数次倍音 (3rd, 5th, 7th)
     audioProcessor.harmonicLevels[2].store(oddLvl * 35.0f);
     audioProcessor.harmonicLevels[4].store(oddLvl * 15.0f);
     audioProcessor.harmonicLevels[6].store(oddLvl * 8.0f);
@@ -262,7 +254,6 @@ void AnalyzerScreen::calculateHarmonics()
 float AnalyzerScreen::getPositionForFrequency(float freq, float width)
 {
     const float minFreq = 5.0f;
-    // ★ ナイキストの崖（垂直落下）を防ぐため、20kHzを上限に設定
     const float maxFreq = 20000.0f;
     float normalized = std::log10(freq / minFreq) / std::log10(maxFreq / minFreq);
     return normalized * width;
@@ -275,6 +266,7 @@ float AnalyzerScreen::getFrequencyForPosition(float x, float width)
     float normalized = x / width;
     return minFreq * std::pow(maxFreq / minFreq, normalized);
 }
+
 void AnalyzerScreen::paint(juce::Graphics& g)
 {
     auto bounds = getLocalBounds().toFloat();
@@ -284,7 +276,6 @@ void AnalyzerScreen::paint(juce::Graphics& g)
     g.setColour(juce::Colours::black.withAlpha(0.5f));
     g.drawRoundedRectangle(bounds.reduced(1.0f), 6.0f, 2.0f);
 
-    // ★ グリッドの描画
     g.setColour(juce::Colour(0xff1c2a30));
     std::vector<float> freqs = { 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000 };
     for (float freq : freqs) {
@@ -303,7 +294,6 @@ void AnalyzerScreen::paint(juce::Graphics& g)
         g.drawText(juce::String(std::round(db)) + " dB", 4, static_cast<int>(y) - 14, 40, 12, juce::Justification::left);
     }
 
-    // スペクトラムの描画
     if (!spectrumPath.isEmpty()) {
         juce::ColourGradient specGrad(juce::Colour(0xffff88a3), 0, 0, juce::Colour(0xffaa88ff), bounds.getWidth(), 0, false);
         specGrad.addColour(0.2f, juce::Colour(0xffffee88));
@@ -318,7 +308,6 @@ void AnalyzerScreen::paint(juce::Graphics& g)
         g.fillRect(bounds);
     }
 
-    // EQカーブの描画
     g.setColour(juce::Colours::white);
     g.strokePath(eqCurvePath, juce::PathStrokeType(2.5f, juce::PathStrokeType::curved));
 
