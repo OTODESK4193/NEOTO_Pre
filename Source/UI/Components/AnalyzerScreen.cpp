@@ -84,7 +84,7 @@ void AnalyzerScreen::drawNextFrameOfSpectrum()
             float mag = smoothedSpectrum[static_cast<size_t>(bin1)] * (1.0f - frac) +
                 smoothedSpectrum[static_cast<size_t>(bin2)] * frac;
 
-            float db = juce::Decibels::gainToDecibels(mag) - 18.0f;
+            float db = juce::Decibels::gainToDecibels(mag) - 36.0f;
             float y = juce::jmap(db, -90.0f, 36.0f, bounds.getHeight(), 0.0f);
             y = juce::jlimit(0.0f, bounds.getHeight(), y);
 
