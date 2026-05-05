@@ -1,3 +1,4 @@
+#pragma execution_character_set("utf-8")
 #include "AnalyzerScreen.h"
 
 AnalyzerScreen::AnalyzerScreen(NeotoPreAudioProcessor& p) : audioProcessor(p)
@@ -189,7 +190,10 @@ void AnalyzerScreen::generateEQCurve()
 
     // 各Binのゲインを事前計算（群遅延補正を含む）
     std::array<float, 4096> eqMag = { 0.0f };
-    const float delaySamples = 0.5f;
+
+    // ADAA1(トランス In+Out: 0.5+0.5=1.0) + ADAA2(プリアンプ: 1.0) = 合計 2.0 サンプル遅延
+    const float delaySamples = 2.0f;
+
     for (int i = 1; i < 4096; ++i) {
         float re = eqFftData[static_cast<size_t>(i) * 2];
         float im = eqFftData[static_cast<size_t>(i) * 2 + 1];
