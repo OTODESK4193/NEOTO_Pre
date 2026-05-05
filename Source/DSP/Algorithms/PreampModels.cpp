@@ -33,7 +33,9 @@ float Preamp_API::processDrySample(float input, float driveParam, float charPara
 float Preamp_API::processSample(float input, float driveParam, float charParam, float asymParam, float ageParam)
 {
     if (driveParam != lastDriveParam) {
-        double driveDb = (static_cast<double>(driveParam) / 100.0) * 24.0;
+        // 修正後（3次スケーリング）
+        double normalizedDrive = static_cast<double>(driveParam) / 100.0;
+        double driveDb = std::pow(normalizedDrive, 3.0) * 24.0;
         gain = juce::Decibels::decibelsToGain(driveDb);
         makeUp = 1.0 / (1.0 + (gain - 1.0) * 0.15);
         lastDriveParam = driveParam;
