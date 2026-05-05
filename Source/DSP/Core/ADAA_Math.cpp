@@ -1,3 +1,5 @@
+#pragma execution_character_set("utf-8") // ★ MSVC C4828 警告回避のためのBOM代替指定
+
 #include "ADAA_Math.h"
 #include <cmath>
 
@@ -45,18 +47,10 @@ namespace ADAA_Math
     }
 
     // ==============================================================================
-    // ★ 新規追加: チェビシェフ多項式ベースの関数群
+    // チェビシェフ多項式ベースの関数群
     // ==============================================================================
-
-    // ------------------------------------------------------------------------------
-    // 3次倍音（Punch/Odd）ジェネレータ
-    // 基本的なソフトクリップ特性に T3(x) = 4x^3 - 3x の要素をブレンドし、
-    // エッジの効いた奇数次倍音を生成します。
-    // f_odd(x) = x - 0.2 * x^3 (※クリッピング領域を滑らかに繋ぐためのスケーリング係数)
-    // ------------------------------------------------------------------------------
     double fx_chebyshev_odd(double x)
     {
-        // 飽和点 x = 1.29099 で微係数がゼロになるよう設計
         const double limit = 1.29099;
         const double max_val = limit - 0.2 * limit * limit * limit;
 
@@ -69,9 +63,6 @@ namespace ADAA_Math
     {
         const double limit = 1.29099;
         const double max_val = limit - 0.2 * limit * limit * limit;
-        // x=limit での積分値 C を合わせる
-        // F(limit) = limit^2 / 2 - 0.05 * limit^4 = 0.69444
-        // max_val * limit + C = 0.69444 -> C = 0.69444 - 1.11803 = -0.42359
         const double C = -0.42359;
 
         if (x > limit)
@@ -80,7 +71,7 @@ namespace ADAA_Math
         }
         else if (x < -limit)
         {
-            return -max_val * x + C; // 偶関数的な積分補正
+            return -max_val * x + C;
         }
         else
         {
@@ -89,18 +80,13 @@ namespace ADAA_Math
         }
     }
 
-    // ------------------------------------------------------------------------------
-    // 2次倍音（Smooth/Even）ジェネレータ
-    // 基本の線形項 x に T2(x) = 2x^2 - 1 の要素（非対称性）を付加します。
-    // f_even(x) = x + 0.15 * x^2 - 0.1 * x^3 (発散防止のための3次項)
-    // ------------------------------------------------------------------------------
     double fx_chebyshev_even(double x)
     {
-        const double limit_pos = 2.0; // 正側の飽和点
-        const double limit_neg = -1.0; // 負側の飽和点 (非対称)
+        const double limit_pos = 2.0;
+        const double limit_neg = -1.0;
 
-        const double max_pos = limit_pos + 0.15 * (limit_pos * limit_pos) - 0.1 * (limit_pos * limit_pos * limit_pos); // = 1.8
-        const double max_neg = limit_neg + 0.15 * (limit_neg * limit_neg) - 0.1 * (limit_neg * limit_neg * limit_neg); // = -0.75
+        const double max_pos = limit_pos + 0.15 * (limit_pos * limit_pos) - 0.1 * (limit_pos * limit_pos * limit_pos);
+        const double max_neg = limit_neg + 0.15 * (limit_neg * limit_neg) - 0.1 * (limit_neg * limit_neg * limit_neg);
 
         if (x > limit_pos) return max_pos;
         if (x < limit_neg) return max_neg;
@@ -113,14 +99,7 @@ namespace ADAA_Math
         const double limit_neg = -1.0;
         const double max_pos = 1.8;
         const double max_neg = -0.75;
-
-        // F(x) = x^2/2 + 0.05*x^3 - 0.025*x^4
-        // F(2.0) = 2.0 + 0.4 - 0.4 = 2.0
-        // max_pos * 2.0 + C_pos = 2.0 -> C_pos = -1.6
         const double C_pos = -1.6;
-
-        // F(-1.0) = 0.5 - 0.05 - 0.025 = 0.425
-        // max_neg * (-1.0) + C_neg = 0.425 -> C_neg = -0.325
         const double C_neg = -0.325;
 
         if (x > limit_pos)
@@ -139,9 +118,8 @@ namespace ADAA_Math
     }
 
     // ==============================================================================
-    // ★ 新規追加: 入力トランス素材別の非線形関数
+    // 入力トランス素材別の非線形関数
     // ==============================================================================
-
     double fx_steel(double x)
     {
         const double limit = 1.5;
@@ -154,8 +132,8 @@ namespace ADAA_Math
     double F1_steel(double x)
     {
         const double limit = 1.5;
-        const double max_val = limit - 0.1 * (limit * limit * limit); // 1.1625
-        const double C = -0.384375; // 連続性を保つための積分定数
+        const double max_val = limit - 0.1 * (limit * limit * limit);
+        const double C = -0.384375;
         if (x > limit) return max_val * x + C;
         if (x < -limit) return -max_val * x + C;
         double x2 = x * x;
@@ -166,8 +144,8 @@ namespace ADAA_Math
     {
         const double limit_pos = 1.5;
         const double limit_neg = -1.2;
-        const double max_pos = limit_pos + 0.05 * (limit_pos * limit_pos) - 0.15 * (limit_pos * limit_pos * limit_pos); // 1.10625
-        const double max_neg = limit_neg + 0.05 * (limit_neg * limit_neg) - 0.15 * (limit_neg * limit_neg * limit_neg); // -0.8688
+        const double max_pos = limit_pos + 0.05 * (limit_pos * limit_pos) - 0.15 * (limit_pos * limit_pos * limit_pos);
+        const double max_neg = limit_neg + 0.05 * (limit_neg * limit_neg) - 0.15 * (limit_neg * limit_neg * limit_neg);
         if (x > limit_pos) return max_pos;
         if (x < limit_neg) return max_neg;
         return x + 0.05 * (x * x) - 0.15 * (x * x * x);
@@ -185,6 +163,57 @@ namespace ADAA_Math
         if (x < limit_neg) return max_neg * x + C_neg;
         double x2 = x * x;
         return (x2 / 2.0) + (0.05 / 3.0) * (x2 * x) - (0.15 / 4.0) * (x2 * x2);
+    }
+
+    // ==============================================================================
+    // ★ 新規追加: プリアンプモデル固有の非線形関数
+    // ==============================================================================
+    double fx_tube(double x)
+    {
+        const double limit_pos = 1.5;
+        const double limit_neg = -1.0;
+        const double max_pos = limit_pos - 0.2 * (limit_pos * limit_pos * limit_pos); // 0.825
+        const double max_neg = limit_neg - 0.2 * (limit_neg * limit_neg * limit_neg); // -0.8
+
+        if (x > limit_pos) return max_pos;
+        if (x < limit_neg) return max_neg;
+        return x - 0.2 * (x * x * x);
+    }
+
+    double F1_tube(double x)
+    {
+        const double limit_pos = 1.5;
+        const double limit_neg = -1.0;
+        const double max_pos = 0.825;
+        const double max_neg = -0.8;
+        const double C_pos = -0.365625;
+        const double C_neg = -0.35;
+
+        if (x > limit_pos) return max_pos * x + C_pos;
+        if (x < limit_neg) return max_neg * x + C_neg;
+        double x2 = x * x;
+        return (x2 / 2.0) - 0.05 * (x2 * x2);
+    }
+
+    double fx_hardknee(double x)
+    {
+        const double limit = 2.0;
+        const double max_val = limit - 0.05 * (limit * limit * limit); // 1.6
+        if (x > limit) return max_val;
+        if (x < -limit) return -max_val;
+        return x - 0.05 * (x * x * x);
+    }
+
+    double F1_hardknee(double x)
+    {
+        const double limit = 2.0;
+        const double max_val = 1.6;
+        const double C = -1.4;
+
+        if (x > limit) return max_val * x + C;
+        if (x < -limit) return -max_val * x + C;
+        double x2 = x * x;
+        return (x2 / 2.0) - 0.0125 * (x2 * x2);
     }
 
 } // namespace ADAA_Math

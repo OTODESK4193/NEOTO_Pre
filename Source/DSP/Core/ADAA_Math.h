@@ -42,4 +42,16 @@ namespace ADAA_Math
     double fx_iron(double x);
     double F1_iron(double x);
 
+    // ==============================================================================
+    // ★ 新規追加: プリアンプモデル固有の非線形関数
+    // ==============================================================================
+
+    // Tube (V76s): 閾値まではリニア、超えると急激に非対称なソフトクリップ
+    double fx_tube(double x);
+    double F1_tube(double x);
+
+    // Hardclip (SSL): リニア領域が広く、ニーが非常に硬い対称クリッパー
+    double fx_hardknee(double x);
+    double F1_hardknee(double x);
+
 } // namespace ADAA_Math

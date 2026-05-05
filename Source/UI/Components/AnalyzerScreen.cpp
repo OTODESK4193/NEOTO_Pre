@@ -4,7 +4,15 @@ AnalyzerScreen::AnalyzerScreen(NeotoPreAudioProcessor& p) : audioProcessor(p)
 {
     double fs = 44100.0;
     virtualIn_Nickel.prepare(fs); virtualIn_Steel.prepare(fs); virtualIn_Iron.prepare(fs); virtualIn_Amorphous.prepare(fs);
+
+    // ★ 全プリアンプモデルの初期化
     virtualPreamp_API.prepare(fs);
+    virtualPreamp_Neve.prepare(fs);
+    virtualPreamp_Tube.prepare(fs);
+    virtualPreamp_SSL.prepare(fs);
+    virtualPreamp_Modern1.prepare(fs);
+    virtualPreamp_Modern2.prepare(fs);
+
     virtualOut_Nickel.prepare(fs); virtualOut_Steel.prepare(fs); virtualOut_Iron.prepare(fs); virtualOut_Amorphous.prepare(fs);
 
     virtualOut_Nickel.setAnalyzerMode(true);
@@ -52,7 +60,7 @@ void AnalyzerScreen::drawNextFrameOfSpectrum()
         window.multiplyWithWindowingTable(spectrumFftData.data(), 8192);
         fft.performFrequencyOnlyForwardTransform(spectrumFftData.data());
 
-        // 1. スムージング処理 (Binベース)
+        // スムージング処理
         for (int i = 1; i < 4096; ++i) {
             float mag = spectrumFftData[static_cast<size_t>(i)];
             if (i > 1 && i < 4095) {
@@ -66,7 +74,7 @@ void AnalyzerScreen::drawNextFrameOfSpectrum()
             }
         }
 
-        // 2. ピクセルベースの補間描画
+        // ピクセルベースの補間描画パス構築
         auto bounds = getLocalBounds().toFloat();
         spectrumPath.clear();
         bool firstPoint = true;
@@ -80,11 +88,9 @@ void AnalyzerScreen::drawNextFrameOfSpectrum()
             int bin2 = std::min(bin1 + 1, 4095);
             float frac = binExact - static_cast<float>(bin1);
 
-            // ゲインの線形補間
             float mag = smoothedSpectrum[static_cast<size_t>(bin1)] * (1.0f - frac) +
                 smoothedSpectrum[static_cast<size_t>(bin2)] * frac;
 
-            // 表示オフセット (-36dB)
             float db = juce::Decibels::gainToDecibels(mag) - 36.0f;
             float y = juce::jmap(db, -90.0f, 36.0f, bounds.getHeight(), 0.0f);
             y = juce::jlimit(0.0f, bounds.getHeight(), y);
@@ -120,16 +126,33 @@ void AnalyzerScreen::generateEQCurve()
 
     double fs = 44100.0;
     virtualIn_Nickel.prepare(fs); virtualIn_Steel.prepare(fs); virtualIn_Iron.prepare(fs); virtualIn_Amorphous.prepare(fs);
+
+    // ★ 仮想プリアンプのパラメータリセット用prepare
     virtualPreamp_API.prepare(fs);
+    virtualPreamp_Neve.prepare(fs);
+    virtualPreamp_Tube.prepare(fs);
+    virtualPreamp_SSL.prepare(fs);
+    virtualPreamp_Modern1.prepare(fs);
+    virtualPreamp_Modern2.prepare(fs);
+
     virtualOut_Nickel.prepare(fs); virtualOut_Steel.prepare(fs); virtualOut_Iron.prepare(fs); virtualOut_Amorphous.prepare(fs);
 
+    // IIRフィルタの安定化（ウォームアップ）ループ
     for (int i = 0; i < 8192; ++i) {
         float s = 0.0f;
         if (inIdx == 1) s = virtualIn_Nickel.processSample(s);
         else if (inIdx == 2) s = virtualIn_Steel.processSample(s);
         else if (inIdx == 3) s = virtualIn_Iron.processSample(s);
         else if (inIdx == 4) s = virtualIn_Amorphous.processSample(s);
+
+        // ★ プリアンプモデルの動的ルーティング
         if (preIdx == 0) s = virtualPreamp_API.processSample(s, drive, charac, asym, age);
+        else if (preIdx == 1) s = virtualPreamp_Neve.processSample(s, drive, charac, asym, age);
+        else if (preIdx == 2) s = virtualPreamp_Tube.processSample(s, drive, charac, asym, age);
+        else if (preIdx == 3) s = virtualPreamp_SSL.processSample(s, drive, charac, asym, age);
+        else if (preIdx == 4) s = virtualPreamp_Modern1.processSample(s, drive, charac, asym, age);
+        else if (preIdx == 5) s = virtualPreamp_Modern2.processSample(s, drive, charac, asym, age);
+
         if (outIdx == 1) s = virtualOut_Nickel.processSample(s, color, air, age);
         else if (outIdx == 2) s = virtualOut_Steel.processSample(s, color, air, age);
         else if (outIdx == 3) s = virtualOut_Iron.processSample(s, color, air, age);
@@ -137,15 +160,24 @@ void AnalyzerScreen::generateEQCurve()
     }
 
     std::fill(eqFftData.begin(), eqFftData.end(), 0.0f);
-    eqFftData[0] = 1.0f;
+    eqFftData[0] = 1.0f; // インパルス入力
 
+    // インパルス応答取得ループ
     for (int i = 0; i < 8192; ++i) {
         float s = eqFftData[static_cast<size_t>(i)];
         if (inIdx == 1) s = virtualIn_Nickel.processSample(s);
         else if (inIdx == 2) s = virtualIn_Steel.processSample(s);
         else if (inIdx == 3) s = virtualIn_Iron.processSample(s);
         else if (inIdx == 4) s = virtualIn_Amorphous.processSample(s);
+
+        // ★ プリアンプモデルの動的ルーティング
         if (preIdx == 0) s = virtualPreamp_API.processSample(s, drive, charac, asym, age);
+        else if (preIdx == 1) s = virtualPreamp_Neve.processSample(s, drive, charac, asym, age);
+        else if (preIdx == 2) s = virtualPreamp_Tube.processSample(s, drive, charac, asym, age);
+        else if (preIdx == 3) s = virtualPreamp_SSL.processSample(s, drive, charac, asym, age);
+        else if (preIdx == 4) s = virtualPreamp_Modern1.processSample(s, drive, charac, asym, age);
+        else if (preIdx == 5) s = virtualPreamp_Modern2.processSample(s, drive, charac, asym, age);
+
         if (outIdx == 1) s = virtualOut_Nickel.processSample(s, color, air, age);
         else if (outIdx == 2) s = virtualOut_Steel.processSample(s, color, air, age);
         else if (outIdx == 3) s = virtualOut_Iron.processSample(s, color, air, age);
@@ -155,7 +187,7 @@ void AnalyzerScreen::generateEQCurve()
 
     fft.performRealOnlyForwardTransform(eqFftData.data());
 
-    // 1. 各Binのゲインを事前計算
+    // 各Binのゲインを事前計算（群遅延補正を含む）
     std::array<float, 4096> eqMag = { 0.0f };
     const float delaySamples = 0.5f;
     for (int i = 1; i < 4096; ++i) {
@@ -169,7 +201,6 @@ void AnalyzerScreen::generateEQCurve()
         eqMag[static_cast<size_t>(i)] = std::sqrt(reFlat * reFlat + imFlat * imFlat);
     }
 
-    // 2. ピクセルベースの補間描画
     auto bounds = getLocalBounds().toFloat();
     eqCurvePath.clear();
     bool firstPoint = true;
@@ -216,39 +247,32 @@ void AnalyzerScreen::calculateHarmonics()
 
     float driveFactor = drive / 100.0f;
 
-    // Colorノブに3次曲線を適用
     float colorFactor = color / 100.0f;
     float colorCurve = std::pow(colorFactor, 3.0f);
 
-    // プリアンプセクションの基本倍音
     float evenLvl = driveFactor * totalEvenDrive * 0.8f;
     float oddLvl = driveFactor * mixOdd * 0.8f;
 
-    // ★ 出力トランスの物理特性に基づく「プロ仕様」のリチューニング
     if (outIdx == 1) {
-        // Nickel (J-Aモデル): Color 0 ではメーターを極限まで沈める
         oddLvl += 0.001f + (colorCurve * 2.0f);
         evenLvl += 0.0005f + (colorCurve * 0.4f);
     }
     else if (outIdx == 2) {
-        // Steel (Tellinenモデル・ワイド): 温かみのあるマイルドな飽和
         oddLvl += 0.015f + colorCurve * 0.8f;
         evenLvl += 0.005f + colorCurve * 0.6f;
     }
     else if (outIdx == 3) {
-        // Iron (Tellinenモデル・タイト): 奇数次倍音が鋭く立ち上がるパンチ力
         oddLvl += 0.015f + colorCurve * 1.3f;
         evenLvl += 0.005f + colorCurve * 0.3f;
     }
     else if (outIdx == 4) {
-        // Amorphous: クリーンさを維持しつつ後半で鋭利なクリップ
         oddLvl += (colorCurve * colorCurve) * 2.5f;
     }
 
     evenLvl = std::clamp(evenLvl, 0.0f, 1.5f);
     oddLvl = std::clamp(oddLvl, 0.0f, 1.5f);
 
-    audioProcessor.harmonicLevels[0].store(100.0f); // Root
+    audioProcessor.harmonicLevels[0].store(100.0f);
 
     audioProcessor.harmonicLevels[1].store(evenLvl * 45.0f);
     audioProcessor.harmonicLevels[3].store(evenLvl * 20.0f);
@@ -258,7 +282,6 @@ void AnalyzerScreen::calculateHarmonics()
     audioProcessor.harmonicLevels[4].store(oddLvl * 15.0f);
     audioProcessor.harmonicLevels[6].store(oddLvl * 8.0f);
 }
-
 
 float AnalyzerScreen::getPositionForFrequency(float freq, float width)
 {

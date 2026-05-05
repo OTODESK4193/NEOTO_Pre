@@ -20,9 +20,9 @@ private:
     void generateEQCurve();
     void calculateHarmonics();
 
-    // ★ 座標変換関数
+    // 座標変換関数
     float getPositionForFrequency(float freq, float width);
-    float getFrequencyForPosition(float x, float width); // 新規追加
+    float getFrequencyForPosition(float x, float width);
 
     NeotoPreAudioProcessor& audioProcessor;
 
@@ -42,7 +42,13 @@ private:
     InputTransformer_Iron      virtualIn_Iron;
     InputTransformer_Amorphous virtualIn_Amorphous;
 
+    // ★ プリアンプの全モデルを仮想インスタンスとして保持
     Preamp_API virtualPreamp_API;
+    Preamp_Neve virtualPreamp_Neve;
+    Preamp_Tube virtualPreamp_Tube;
+    Preamp_SSL virtualPreamp_SSL;
+    Preamp_Modern1 virtualPreamp_Modern1;
+    Preamp_Modern2 virtualPreamp_Modern2;
 
     OutputTransformer_Nickel    virtualOut_Nickel;
     OutputTransformer_Steel     virtualOut_Steel;
