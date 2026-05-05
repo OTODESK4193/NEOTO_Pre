@@ -3,22 +3,32 @@
 
 AnalyzerScreen::AnalyzerScreen(NeotoPreAudioProcessor& p) : audioProcessor(p)
 {
-    double fs = 44100.0;
-    virtualIn_Nickel.prepare(fs); virtualIn_Steel.prepare(fs); virtualIn_Iron.prepare(fs); virtualIn_Amorphous.prepare(fs);
+    // 初期化時はデフォルトのサンプルレート（timerCallbackで実際のレートに更新される）
+    double initialFs = 44100.0;
+    virtualIn_Nickel.prepare(initialFs); virtualIn_Steel.prepare(initialFs); virtualIn_Iron.prepare(initialFs); virtualIn_Amorphous.prepare(initialFs);
 
-    // ★ 全プリアンプモデルの初期化
-    virtualPreamp_API.prepare(fs);
-    virtualPreamp_Neve.prepare(fs);
-    virtualPreamp_Tube.prepare(fs);
-    virtualPreamp_SSL.prepare(fs);
-    virtualPreamp_Modern1.prepare(fs);
-    virtualPreamp_Modern2.prepare(fs);
+    // ★ 全仮想プリアンプモデルの初期化
+    virtualPreamp_API.prepare(initialFs);
+    virtualPreamp_Neve.prepare(initialFs);
+    virtualPreamp_Tube.prepare(initialFs);
+    virtualPreamp_SSL.prepare(initialFs);
+    virtualPreamp_Modern1.prepare(initialFs);
+    virtualPreamp_Modern2.prepare(initialFs);
 
-    virtualOut_Nickel.prepare(fs); virtualOut_Steel.prepare(fs); virtualOut_Iron.prepare(fs); virtualOut_Amorphous.prepare(fs);
+    // ★ アナライザーモードを有効化（EQカーブ描画時に非線形サチュレーションをバイパス）
+    virtualPreamp_API.setAnalyzerMode(true);
+    virtualPreamp_Neve.setAnalyzerMode(true);
+    virtualPreamp_Tube.setAnalyzerMode(true);
+    virtualPreamp_SSL.setAnalyzerMode(true);
+    virtualPreamp_Modern1.setAnalyzerMode(true);
+    virtualPreamp_Modern2.setAnalyzerMode(true);
+
+    virtualOut_Nickel.prepare(initialFs); virtualOut_Steel.prepare(initialFs); virtualOut_Iron.prepare(initialFs); virtualOut_Amorphous.prepare(initialFs);
 
     virtualOut_Nickel.setAnalyzerMode(true);
     virtualOut_Steel.setAnalyzerMode(true);
     virtualOut_Iron.setAnalyzerMode(true);
+    virtualOut_Amorphous.setAnalyzerMode(true);
 
     startTimerHz(30);
 }
@@ -80,11 +90,15 @@ void AnalyzerScreen::drawNextFrameOfSpectrum()
         spectrumPath.clear();
         bool firstPoint = true;
 
+        // 現在のサンプルレートを取得
+        double currentFs = audioProcessor.getSampleRate();
+        if (currentFs <= 0.0) currentFs = 44100.0;
+
         for (float x = 0; x <= bounds.getWidth(); x += 1.0f) {
             float freq = getFrequencyForPosition(x, bounds.getWidth());
             if (freq < 5.0f || freq > 20000.0f) continue;
 
-            float binExact = freq * 8192.0f / 44100.0f;
+            float binExact = freq * 8192.0f / static_cast<float>(currentFs);
             int bin1 = static_cast<int>(binExact);
             int bin2 = std::min(bin1 + 1, 4095);
             float frac = binExact - static_cast<float>(bin1);
@@ -125,18 +139,14 @@ void AnalyzerScreen::generateEQCurve()
     float air = audioProcessor.apvts.getRawParameterValue("air")->load();
     float age = audioProcessor.apvts.getRawParameterValue("age")->load();
 
-    double fs = 44100.0;
-    virtualIn_Nickel.prepare(fs); virtualIn_Steel.prepare(fs); virtualIn_Iron.prepare(fs); virtualIn_Amorphous.prepare(fs);
+    // ★ 現在のオーディオプロセッサーのサンプルレートを動的に取得
+    double currentFs = audioProcessor.getSampleRate();
+    if (currentFs <= 0.0) currentFs = 44100.0; // フォールバック
 
-    // ★ 仮想プリアンプのパラメータリセット用prepare
-    virtualPreamp_API.prepare(fs);
-    virtualPreamp_Neve.prepare(fs);
-    virtualPreamp_Tube.prepare(fs);
-    virtualPreamp_SSL.prepare(fs);
-    virtualPreamp_Modern1.prepare(fs);
-    virtualPreamp_Modern2.prepare(fs);
-
-    virtualOut_Nickel.prepare(fs); virtualOut_Steel.prepare(fs); virtualOut_Iron.prepare(fs); virtualOut_Amorphous.prepare(fs);
+    virtualIn_Nickel.prepare(currentFs); virtualIn_Steel.prepare(currentFs); virtualIn_Iron.prepare(currentFs); virtualIn_Amorphous.prepare(currentFs);
+    virtualPreamp_API.prepare(currentFs); virtualPreamp_Neve.prepare(currentFs); virtualPreamp_Tube.prepare(currentFs); virtualPreamp_SSL.prepare(currentFs);
+    virtualPreamp_Modern1.prepare(currentFs); virtualPreamp_Modern2.prepare(currentFs);
+    virtualOut_Nickel.prepare(currentFs); virtualOut_Steel.prepare(currentFs); virtualOut_Iron.prepare(currentFs); virtualOut_Amorphous.prepare(currentFs);
 
     // IIRフィルタの安定化（ウォームアップ）ループ
     for (int i = 0; i < 8192; ++i) {
@@ -146,7 +156,6 @@ void AnalyzerScreen::generateEQCurve()
         else if (inIdx == 3) s = virtualIn_Iron.processSample(s);
         else if (inIdx == 4) s = virtualIn_Amorphous.processSample(s);
 
-        // ★ プリアンプモデルの動的ルーティング
         if (preIdx == 0) s = virtualPreamp_API.processSample(s, drive, charac, asym, age);
         else if (preIdx == 1) s = virtualPreamp_Neve.processSample(s, drive, charac, asym, age);
         else if (preIdx == 2) s = virtualPreamp_Tube.processSample(s, drive, charac, asym, age);
@@ -171,7 +180,6 @@ void AnalyzerScreen::generateEQCurve()
         else if (inIdx == 3) s = virtualIn_Iron.processSample(s);
         else if (inIdx == 4) s = virtualIn_Amorphous.processSample(s);
 
-        // ★ プリアンプモデルの動的ルーティング
         if (preIdx == 0) s = virtualPreamp_API.processSample(s, drive, charac, asym, age);
         else if (preIdx == 1) s = virtualPreamp_Neve.processSample(s, drive, charac, asym, age);
         else if (preIdx == 2) s = virtualPreamp_Tube.processSample(s, drive, charac, asym, age);
@@ -183,6 +191,7 @@ void AnalyzerScreen::generateEQCurve()
         else if (outIdx == 2) s = virtualOut_Steel.processSample(s, color, air, age);
         else if (outIdx == 3) s = virtualOut_Iron.processSample(s, color, air, age);
         else if (outIdx == 4) s = virtualOut_Amorphous.processSample(s, color, air, age);
+
         eqFftData[static_cast<size_t>(i)] = s;
     }
 
@@ -200,6 +209,7 @@ void AnalyzerScreen::generateEQCurve()
         float theta = juce::MathConstants<float>::twoPi * static_cast<float>(i) * delaySamples / 8192.0f;
         float cosTheta = std::cos(theta);
         float sinTheta = std::sin(theta);
+        // ★ 位相干渉相殺（Phase Rotation）
         float reFlat = re * cosTheta - im * sinTheta;
         float imFlat = re * sinTheta + im * cosTheta;
         eqMag[static_cast<size_t>(i)] = std::sqrt(reFlat * reFlat + imFlat * imFlat);
@@ -213,7 +223,8 @@ void AnalyzerScreen::generateEQCurve()
         float freq = getFrequencyForPosition(x, bounds.getWidth());
         if (freq < 5.0f || freq > 22050.0f) continue;
 
-        float binExact = freq * 8192.0f / 44100.0f;
+        // ★ 動的なサンプルレートに基づく周波数ビンの計算
+        float binExact = freq * 8192.0f / static_cast<float>(currentFs);
         int bin1 = static_cast<int>(binExact);
         int bin2 = std::min(bin1 + 1, 4095);
         float frac = binExact - static_cast<float>(bin1);
