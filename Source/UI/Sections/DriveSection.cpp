@@ -10,7 +10,7 @@ DriveSection::DriveSection(NeotoPreAudioProcessor& p) : audioProcessor(p)
     charSlider.setLookAndFeel(&arcLnF);
     asymSlider.setLookAndFeel(&arcLnF);
 
-    preampModelCombo.addItemList({ "API Style", "Neve Style", "Vintage Tube", "SSL Modern", "Modern 1", "Modern 2" }, 1);
+    preampModelCombo.addItemList({ "API Style", "Neve Style", "Vintage Tube", "SSL Modern", "TG2 Modern", "B173 Modern" }, 1);
     addAndMakeVisible(preampModelCombo);
     preampModelLabel.setText("Preamp Model", juce::dontSendNotification);
     preampModelLabel.setJustificationType(juce::Justification::centred);
