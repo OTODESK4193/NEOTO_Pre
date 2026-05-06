@@ -69,16 +69,23 @@ void InputSection::paint(juce::Graphics& g)
 void InputSection::resized()
 {
     auto area = getLocalBounds().reduced(5, 5);
+
+    // タイトル("INPUT STAGE")用の領域
     area.removeFromTop(25);
 
     auto topRow = area.removeFromTop(120);
     inputGainLabel.setBounds(topRow.removeFromTop(20));
-    inputGainSlider.setBounds(topRow.withSizeKeepingCentre(85, 85)); // 巨大化
+    inputGainSlider.setBounds(topRow.withSizeKeepingCentre(85, 85));
 
-    auto midRow = area.removeFromTop(80);
+    // [修正箇所]
+    // 以前は80pxを割り当てていたため、下部に約36pxの空白が生じていました。
+    // ラベル(20px) + コンボボックス(24px) = 44px に対し、
+    // わずかな余白を加えた50pxを割り当てることで、要素の重なりを防ぎつつ上に詰めます。
+    auto midRow = area.removeFromTop(50);
     osModeLabel.setBounds(midRow.removeFromTop(20).withSizeKeepingCentre(120, 20));
     osModeCombo.setBounds(midRow.removeFromTop(24).withSizeKeepingCentre(120, 24));
 
+    // 詰められた残りの領域にInput Transformerを配置
     auto bottomRow = area;
     inTransLabel.setBounds(bottomRow.removeFromTop(20).withSizeKeepingCentre(140, 20));
     inTransCombo.setBounds(bottomRow.removeFromTop(24).withSizeKeepingCentre(140, 24));
