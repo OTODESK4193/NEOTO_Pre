@@ -145,6 +145,7 @@ public:
 private:
     double fs = 44100.0; bool isAnalyzerMode = false;
     float lastColorParam = -1.0f, lastAirParam = -1.0f, lastAgeParam = -1.0f;
+    double driveGain = 1.0;
     double lpfState = 0.0, alphaLpf = 0.0;
     double lpfState_dry = 0.0;
 
@@ -166,7 +167,7 @@ private:
     double hpfState_dry = 0.0, lastInput_dry = 0.0, apfState_dry = 0.0, lastApfInput_dry = 0.0, lpfState_dry = 0.0;
     float lastColorParam = -1.0f, lastAirParam = -1.0f, lastAgeParam = -1.0f;
     double alphaHpf = 0.0, apfAlpha = 0.0, alphaLpf = 0.0;
-    double hystDrive = 1.0, hystHc = 0.1;
+    double hystDrive = 1.0, hystHc = 1e-6;
     TellinenHysteresis hysteresisEngine;
 };
 
@@ -182,7 +183,7 @@ private:
     double hpfState_dry = 0.0, lastInput_dry = 0.0, lpfState_dry = 0.0;
     float lastColorParam = -1.0f, lastAirParam = -1.0f, lastAgeParam = -1.0f;
     double alphaHpf = 0.0, alphaLpf = 0.0;
-    double hystDrive = 1.0, hystHc = 0.05;
+    double hystDrive = 1.0, hystHc = 1e-6;
     TellinenHysteresis hysteresisEngine;
 };
 
@@ -201,7 +202,6 @@ private:
     double hpfState_dry = 0.0, lastInput_dry = 0.0, lpfState_dry = 0.0;
 };
 
-// Åö TG2 Style (Carnhill) 
 class OutputTransformer_Carnhill : public IOutputTransformerEngine {
 public:
     void prepare(double sampleRate) override;
@@ -212,22 +212,18 @@ private:
     double fs = 44100.0; bool isAnalyzerMode = false;
     float lastColorParam = -1.0f, lastAirParam = -1.0f, lastAgeParam = -1.0f;
 
-    // Age (HPF & LPF)
     double hpfState = 0.0, lpfState = 0.0, lastInput = 0.0, alphaHpf = 0.0, alphaLpf = 0.0;
     double hpfState_dry = 0.0, lpfState_dry = 0.0, lastInput_dry = 0.0;
 
-    // Color (High Shelf @ 3.5kHz)
     double col_x1 = 0.0, col_x2 = 0.0, col_y1 = 0.0, col_y2 = 0.0;
     double col_x1_dry = 0.0, col_x2_dry = 0.0, col_y1_dry = 0.0, col_y2_dry = 0.0;
     double col_b0 = 1.0, col_b1 = 0.0, col_b2 = 0.0, col_a1 = 0.0, col_a2 = 0.0;
 
-    // Air (High Shelf @ 10kHz to be safe)
     double air_x1 = 0.0, air_x2 = 0.0, air_y1 = 0.0, air_y2 = 0.0;
     double air_x1_dry = 0.0, air_x2_dry = 0.0, air_y1_dry = 0.0, air_y2_dry = 0.0;
     double air_b0 = 1.0, air_b1 = 0.0, air_b2 = 0.0, air_a1 = 0.0, air_a2 = 0.0;
 };
 
-// Åö B173 Style (Cinemag)
 class OutputTransformer_Cinemag : public IOutputTransformerEngine {
 public:
     void prepare(double sampleRate) override;
@@ -238,21 +234,17 @@ private:
     double fs = 44100.0; bool isAnalyzerMode = false;
     float lastColorParam = -1.0f, lastAirParam = -1.0f, lastAgeParam = -1.0f;
 
-    // Age (HPF & LPF)
     double hpfState = 0.0, lpfState = 0.0, lastInput = 0.0, alphaHpf = 0.0, alphaLpf = 0.0;
     double hpfState_dry = 0.0, lpfState_dry = 0.0, lastInput_dry = 0.0;
 
-    // Color (Low Shelf @ 80Hz)
     double colL_x1 = 0.0, colL_x2 = 0.0, colL_y1 = 0.0, colL_y2 = 0.0;
     double colL_x1_dry = 0.0, colL_x2_dry = 0.0, colL_y1_dry = 0.0, colL_y2_dry = 0.0;
     double colL_b0 = 1.0, colL_b1 = 0.0, colL_b2 = 0.0, colL_a1 = 0.0, colL_a2 = 0.0;
 
-    // Color (High Shelf @ 12kHz)
     double colH_x1 = 0.0, colH_x2 = 0.0, colH_y1 = 0.0, colH_y2 = 0.0;
     double colH_x1_dry = 0.0, colH_x2_dry = 0.0, colH_y1_dry = 0.0, colH_y2_dry = 0.0;
     double colH_b0 = 1.0, colH_b1 = 0.0, colH_b2 = 0.0, colH_a1 = 0.0, colH_a2 = 0.0;
 
-    // Air (High Shelf @ 5kHz)
     double air_x1 = 0.0, air_x2 = 0.0, air_y1 = 0.0, air_y2 = 0.0;
     double air_x1_dry = 0.0, air_x2_dry = 0.0, air_y1_dry = 0.0, air_y2_dry = 0.0;
     double air_b0 = 1.0, air_b1 = 0.0, air_b2 = 0.0, air_a1 = 0.0, air_a2 = 0.0;

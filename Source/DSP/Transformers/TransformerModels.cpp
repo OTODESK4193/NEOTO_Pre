@@ -4,13 +4,13 @@
 #include <algorithm>
 
 //==============================================================================
-// Biquad Coefficient Calculators (Inline helpers)
+// Biquad Coefficient Calculators (Inline helpers, Heap-allocation free)
 //==============================================================================
 static void calcHighShelf(double fs, double fc, double gainDb, double& b0, double& b1, double& b2, double& a1, double& a2) {
     if (std::abs(gainDb) < 0.01) { b0 = 1.0; b1 = 0.0; b2 = 0.0; a1 = 0.0; a2 = 0.0; return; }
     double A = std::pow(10.0, gainDb / 40.0);
     double w0 = juce::MathConstants<double>::twoPi * std::min(fc, fs * 0.49) / fs;
-    double alpha = std::sin(w0) / 2.0 * std::sqrt((A + 1.0 / A) * (1.0 / 1.0 - 1.0) + 2.0); // Q=0.707 (S=1) -> sqrt(2)
+    double alpha = std::sin(w0) / 2.0 * std::sqrt((A + 1.0 / A) * (1.0 / 1.0 - 1.0) + 2.0);
     double a0 = (A + 1.0) - (A - 1.0) * std::cos(w0) + 2.0 * std::sqrt(A) * alpha;
     b0 = (A * ((A + 1.0) + (A - 1.0) * std::cos(w0) + 2.0 * std::sqrt(A) * alpha)) / a0;
     b1 = (-2.0 * A * ((A - 1.0) + (A + 1.0) * std::cos(w0))) / a0;
@@ -23,7 +23,7 @@ static void calcLowShelf(double fs, double fc, double gainDb, double& b0, double
     if (std::abs(gainDb) < 0.01) { b0 = 1.0; b1 = 0.0; b2 = 0.0; a1 = 0.0; a2 = 0.0; return; }
     double A = std::pow(10.0, gainDb / 40.0);
     double w0 = juce::MathConstants<double>::twoPi * std::min(fc, fs * 0.49) / fs;
-    double alpha = std::sin(w0) / 2.0 * std::sqrt(2.0); // S=1
+    double alpha = std::sin(w0) / 2.0 * std::sqrt((A + 1.0 / A) * (1.0 / 1.0 - 1.0) + 2.0);
     double a0 = (A + 1.0) + (A - 1.0) * std::cos(w0) + 2.0 * std::sqrt(A) * alpha;
     b0 = (A * ((A + 1.0) - (A - 1.0) * std::cos(w0) + 2.0 * std::sqrt(A) * alpha)) / a0;
     b1 = (2.0 * A * ((A - 1.0) - (A + 1.0) * std::cos(w0))) / a0;
@@ -120,10 +120,10 @@ float InputTransformer_Cinemag::processDrySample(float input) {
 //==============================================================================
 // Output Transformers
 //==============================================================================
-
 void OutputTransformer_Amorphous::prepare(double sampleRate) {
     fs = sampleRate;
     lastColorParam = -1.0f; lastAirParam = -1.0f; lastAgeParam = -1.0f;
+    driveGain = 1.0;
     lpfState = 0.0; alphaLpf = 0.0; lpfState_dry = 0.0;
     air_x1 = 0.0; air_x2 = 0.0; air_y1 = 0.0; air_y2 = 0.0;
     air_x1_dry = 0.0; air_x2_dry = 0.0; air_y1_dry = 0.0; air_y2_dry = 0.0;
@@ -131,12 +131,17 @@ void OutputTransformer_Amorphous::prepare(double sampleRate) {
 }
 
 float OutputTransformer_Amorphous::processSample(float input, float colorParam, float airParam, float ageParam) {
+    if (colorParam != lastColorParam) {
+        double cv = static_cast<double>(colorParam) / 100.0;
+        driveGain = juce::jmap(cv, 0.0, 1.0, 1.0, 3.0);
+        lastColorParam = colorParam;
+    }
     if (airParam != lastAirParam) {
         double cv = static_cast<double>(airParam) / 100.0;
         calcHighShelf(fs, 5000.0, cv * 3.0, air_b0, air_b1, air_b2, air_a1, air_a2);
         lastAirParam = airParam;
     }
-    if (ageParam != lastAgeParam) {
+    if (ageParam != lastAgeParam || alphaLpf == 0.0) {
         double cv = static_cast<double>(ageParam) / 100.0;
         double fcLpf = std::min(juce::jmap(cv, 0.0, 1.0, 40000.0, 15000.0), fs * 0.49);
         alphaLpf = std::exp(-juce::MathConstants<double>::twoPi * fcLpf / fs);
@@ -144,13 +149,9 @@ float OutputTransformer_Amorphous::processSample(float input, float colorParam, 
     }
 
     double dIn = static_cast<double>(input);
-
-    // Saturation Bypass for Analyzer
-    double hystOut = isAnalyzerMode ? dIn : std::tanh(dIn * 1.05);
-
+    double hystOut = isAnalyzerMode ? dIn : std::tanh(dIn * driveGain) / std::sqrt(driveGain);
     double airOut = air_b0 * hystOut + air_b1 * air_x1 + air_b2 * air_x2 - air_a1 * air_y1 - air_a2 * air_y2;
     air_x2 = air_x1; air_x1 = hystOut; air_y2 = air_y1; air_y1 = airOut;
-
     double lpfOut = airOut * (1.0 - alphaLpf) + alphaLpf * lpfState; lpfState = lpfOut;
     return static_cast<float>(lpfOut);
 }
@@ -174,11 +175,11 @@ void OutputTransformer_Steel::prepare(double sampleRate) {
 float OutputTransformer_Steel::processSample(float input, float colorParam, float airParam, float ageParam) {
     if (colorParam != lastColorParam) {
         double cv = static_cast<double>(colorParam) / 100.0;
-        hystDrive = juce::jmap(cv, 0.0, 1.0, 1.0, 3.5);
-        hystHc = juce::jmap(cv, 0.0, 1.0, 0.1, 0.4);
+        hystDrive = juce::jmap(cv, 0.0, 1.0, 1.0, 1.75); // スケーリング修正
+        hystHc = juce::jmap(cv, 0.0, 1.0, 1e-6, 0.19);   // Color=0の時のゲート効果防止
         lastColorParam = colorParam;
     }
-    if (ageParam != lastAgeParam) {
+    if (ageParam != lastAgeParam || alphaHpf == 0.0) {
         double cv = static_cast<double>(ageParam) / 100.0;
         double fcHpf = std::min(juce::jmap(cv, 0.0, 1.0, 20.0, 60.0), fs * 0.49);
         alphaHpf = std::exp(-juce::MathConstants<double>::twoPi * fcHpf / fs);
@@ -196,7 +197,6 @@ float OutputTransformer_Steel::processSample(float input, float colorParam, floa
     double dIn = static_cast<double>(input);
     double hpfOut = dIn - lastInput + alphaHpf * hpfState; hpfState = hpfOut; lastInput = dIn;
 
-    // Saturation Bypass for Analyzer
     double hystOut = isAnalyzerMode ? hpfOut : hysteresisEngine.processSample(static_cast<float>(hpfOut), hystDrive, hystHc);
 
     double apfOut = apfAlpha * hystOut + lastApfInput - apfAlpha * apfState; apfState = apfOut; lastApfInput = hystOut;
@@ -223,11 +223,11 @@ void OutputTransformer_Iron::prepare(double sampleRate) {
 float OutputTransformer_Iron::processSample(float input, float colorParam, float airParam, float ageParam) {
     if (colorParam != lastColorParam) {
         double cv = static_cast<double>(colorParam) / 100.0;
-        hystDrive = juce::jmap(cv, 0.0, 1.0, 1.0, 5.0);
-        hystHc = juce::jmap(cv, 0.0, 1.0, 0.05, 0.25);
+        hystDrive = juce::jmap(cv, 0.0, 1.0, 1.0, 2.2);   // スケーリング修正
+        hystHc = juce::jmap(cv, 0.0, 1.0, 1e-6, 0.11);    // Color=0の時のゲート効果防止
         lastColorParam = colorParam;
     }
-    if (ageParam != lastAgeParam) {
+    if (ageParam != lastAgeParam || alphaHpf == 0.0) {
         double cv = static_cast<double>(ageParam) / 100.0;
         double fcHpf = std::min(juce::jmap(cv, 0.0, 1.0, 10.0, 40.0), fs * 0.49);
         alphaHpf = std::exp(-juce::MathConstants<double>::twoPi * fcHpf / fs);
@@ -239,7 +239,6 @@ float OutputTransformer_Iron::processSample(float input, float colorParam, float
     double dIn = static_cast<double>(input);
     double hpfOut = dIn - lastInput + alphaHpf * hpfState; hpfState = hpfOut; lastInput = dIn;
 
-    // Saturation Bypass for Analyzer
     double hystOut = isAnalyzerMode ? hpfOut : hysteresisEngine.processSample(static_cast<float>(hpfOut), hystDrive, hystHc);
 
     double lpfOut = hystOut * (1.0 - alphaLpf) + alphaLpf * lpfState; lpfState = lpfOut;
@@ -255,7 +254,7 @@ float OutputTransformer_Iron::processDrySample(float input, float airParam, floa
 
 void OutputTransformer_Nickel::prepare(double sampleRate) {
     fs = sampleRate;
-    hpfState = 0.0; lastInput = 0.0; lpfState = 0.0;
+    hpfState = 0.0; lastInput = 0.0; lpfState = 0.0; alphaHpf = 0.0; alphaLpf = 0.0;
     hpfState_dry = 0.0; lastInput_dry = 0.0; lpfState_dry = 0.0;
     lastColorParam = -1.0f; lastAirParam = -1.0f; lastAgeParam = -1.0f;
     hysteresisEngine.prepare();
@@ -268,7 +267,7 @@ float OutputTransformer_Nickel::processSample(float input, float colorParam, flo
         ja_k = juce::jmap(cv, 0.0, 1.0, 0.0001, 0.01);
         lastColorParam = colorParam;
     }
-    if (ageParam != lastAgeParam) {
+    if (ageParam != lastAgeParam || alphaHpf == 0.0) {
         double cv = static_cast<double>(ageParam) / 100.0;
         double fcHpf = std::min(juce::jmap(cv, 0.0, 1.0, 5.0, 20.0), fs * 0.49);
         alphaHpf = std::exp(-juce::MathConstants<double>::twoPi * fcHpf / fs);
@@ -280,8 +279,8 @@ float OutputTransformer_Nickel::processSample(float input, float colorParam, flo
     double dIn = static_cast<double>(input);
     double hpfOut = dIn - lastInput + alphaHpf * hpfState; hpfState = hpfOut; lastInput = dIn;
 
-    // Saturation Bypass for Analyzer
-    double hystOut = isAnalyzerMode ? hpfOut : hysteresisEngine.processSample(static_cast<float>(hpfOut), ja_a, ja_k, ja_c) * 1.5;
+    // ★ 修正: Nickelの極端な音量低下を防ぐためのメイクアップゲイン適用 (13.33倍)
+    double hystOut = isAnalyzerMode ? hpfOut : hysteresisEngine.processSample(static_cast<float>(hpfOut), ja_a, ja_k, ja_c) * 13.33;
 
     double lpfOut = hystOut * (1.0 - alphaLpf) + alphaLpf * lpfState; lpfState = lpfOut;
     return static_cast<float>(lpfOut);
@@ -294,9 +293,6 @@ float OutputTransformer_Nickel::processDrySample(float input, float airParam, fl
     return static_cast<float>(lpfOut);
 }
 
-//==============================================================================
-// Carnhill (TG2 Style) - Unity gain safe saturation + Biquad EQ
-//==============================================================================
 void OutputTransformer_Carnhill::prepare(double sampleRate) {
     fs = sampleRate;
     lastColorParam = -1.0f; lastAirParam = -1.0f; lastAgeParam = -1.0f;
@@ -321,7 +317,7 @@ float OutputTransformer_Carnhill::processSample(float input, float colorParam, f
         calcHighShelf(fs, 10000.0, cv * 2.0, air_b0, air_b1, air_b2, air_a1, air_a2);
         lastAirParam = airParam;
     }
-    if (ageParam != lastAgeParam || alphaHpf == 0.0) { // 初期化安全策
+    if (ageParam != lastAgeParam || alphaHpf == 0.0) {
         double cv = static_cast<double>(ageParam) / 100.0;
         double fcHpf = std::min(juce::jmap(cv, 0.0, 1.0, 10.0, 45.0), fs * 0.49);
         alphaHpf = std::exp(-juce::MathConstants<double>::twoPi * fcHpf / fs);
@@ -331,16 +327,11 @@ float OutputTransformer_Carnhill::processSample(float input, float colorParam, f
     }
 
     double dIn = static_cast<double>(input);
-
-    // Saturation Bypass for Analyzer. Carnhill = Asymmetric Soft Clip (Even Harmonics)
     double hystOut = isAnalyzerMode ? dIn : std::tanh(dIn + 0.1 * dIn * dIn);
-
     double colOut = col_b0 * hystOut + col_b1 * col_x1 + col_b2 * col_x2 - col_a1 * col_y1 - col_a2 * col_y2;
     col_x2 = col_x1; col_x1 = hystOut; col_y2 = col_y1; col_y1 = colOut;
-
     double airOut = air_b0 * colOut + air_b1 * air_x1 + air_b2 * air_x2 - air_a1 * air_y1 - air_a2 * air_y2;
     air_x2 = air_x1; air_x1 = colOut; air_y2 = air_y1; air_y1 = airOut;
-
     double lpfOut = airOut * (1.0 - alphaLpf) + alphaLpf * lpfState; lpfState = lpfOut;
     double hpfOut = lpfOut - lastInput + alphaHpf * hpfState; hpfState = hpfOut; lastInput = lpfOut;
 
@@ -351,19 +342,14 @@ float OutputTransformer_Carnhill::processDrySample(float input, float airParam, 
     double dIn = static_cast<double>(input);
     double colOut = col_b0 * dIn + col_b1 * col_x1_dry + col_b2 * col_x2_dry - col_a1 * col_y1_dry - col_a2 * col_y2_dry;
     col_x2_dry = col_x1_dry; col_x1_dry = dIn; col_y2_dry = col_y1_dry; col_y1_dry = colOut;
-
     double airOut = air_b0 * colOut + air_b1 * air_x1_dry + air_b2 * air_x2_dry - air_a1 * air_y1_dry - air_a2 * air_y2_dry;
     air_x2_dry = air_x1_dry; air_x1_dry = colOut; air_y2_dry = air_y1_dry; air_y1_dry = airOut;
-
     double lpfOut = airOut * (1.0 - alphaLpf) + alphaLpf * lpfState_dry; lpfState_dry = lpfOut;
     double hpfOut = lpfOut - lastInput_dry + alphaHpf * hpfState_dry; hpfState_dry = hpfOut; lastInput_dry = lpfOut;
 
     return static_cast<float>(hpfOut);
 }
 
-//==============================================================================
-// Cinemag (B173 Style) - Unity gain safe saturation + Biquad EQ
-//==============================================================================
 void OutputTransformer_Cinemag::prepare(double sampleRate) {
     fs = sampleRate;
     lastColorParam = -1.0f; lastAirParam = -1.0f; lastAgeParam = -1.0f;
@@ -389,7 +375,7 @@ float OutputTransformer_Cinemag::processSample(float input, float colorParam, fl
     }
     if (airParam != lastAirParam) {
         double cv = static_cast<double>(airParam) / 100.0;
-        calcHighShelf(fs, 5000.0, cv * 3.0, air_b0, air_b1, air_b2, air_a1, air_a2); // Gentle High Shelf
+        calcHighShelf(fs, 5000.0, cv * 3.0, air_b0, air_b1, air_b2, air_a1, air_a2);
         lastAirParam = airParam;
     }
     if (ageParam != lastAgeParam || alphaHpf == 0.0) {
@@ -402,8 +388,6 @@ float OutputTransformer_Cinemag::processSample(float input, float colorParam, fl
     }
 
     double dIn = static_cast<double>(input);
-
-    // Saturation Bypass for Analyzer. Cinemag = Transparent Soft Clip
     double hystOut = isAnalyzerMode ? dIn : std::tanh(dIn);
 
     double colLOut = colL_b0 * hystOut + colL_b1 * colL_x1 + colL_b2 * colL_x2 - colL_a1 * colL_y1 - colL_a2 * colL_y2;
@@ -423,7 +407,6 @@ float OutputTransformer_Cinemag::processSample(float input, float colorParam, fl
 
 float OutputTransformer_Cinemag::processDrySample(float input, float airParam, float ageParam) {
     double dIn = static_cast<double>(input);
-
     double colLOut = colL_b0 * dIn + colL_b1 * colL_x1_dry + colL_b2 * colL_x2_dry - colL_a1 * colL_y1_dry - colL_a2 * colL_y2_dry;
     colL_x2_dry = colL_x1_dry; colL_x1_dry = dIn; colL_y2_dry = colL_y1_dry; colL_y1_dry = colLOut;
 
