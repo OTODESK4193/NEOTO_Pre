@@ -25,6 +25,9 @@ private:
     juce::ComboBox inTransCombo;
     juce::Label inTransLabel;
 
+    // ★ 追加：ロゴ描画用コンポーネント（リソース管理を自動化）
+    juce::ImageComponent logoComponent;
+
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> inputGainAttach;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> osModeAttach;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> inTransAttach;

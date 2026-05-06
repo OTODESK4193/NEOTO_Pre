@@ -5,6 +5,7 @@ project(NEOTO_Pre VERSION 1.0.0 LANGUAGES C CXX)
 set(JUCE_VST3_AUTO_MANIFEST OFF)
 add_compile_definitions(JUCE_VST3_CAN_REPLACE_VST2=0)
 add_compile_definitions(JUCE_USE_WINDOWS_MEDIA_FORMAT=1)
+
 # [重要] グローバルAppConfigの無効化（依存関係の分離・クラッシュ対策）
 add_compile_definitions(JUCE_USE_APP_CONFIG_HEADER=0)
 
@@ -40,7 +41,16 @@ target_compile_options(NEOTO_Pre PRIVATE
     >
 )
 
-# 5. ソースコードの追加（役割ごとの完全分離）
+# ★ 5. バイナリリソースの追加 (画像ファイルの組み込み)
+# 拡張子を除いたファイル名が変数として自動生成されます（例: LOGO.png -> LOGO_png）
+juce_add_binary_data(NEOTO_Pre_BinaryData
+    HEADER_NAME "BinaryData.h"
+    NAMESPACE "BinaryData"
+    SOURCES
+        Source/Assets/LOGO.png
+)
+
+# 6. ソースコードの追加（役割ごとの完全分離）
 target_sources(NEOTO_Pre PRIVATE
     Source/PluginProcessor.cpp
     Source/PluginProcessor.h
@@ -81,7 +91,7 @@ target_sources(NEOTO_Pre PRIVATE
     Source/UI/Sections/OutputSection.h
 )
 
-# 6. インクルードパス
+# 7. インクルードパス
 target_include_directories(NEOTO_Pre PRIVATE
     Source
     Source/DSP/Core
@@ -92,7 +102,7 @@ target_include_directories(NEOTO_Pre PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}/NEOTO_Pre_artefacts/JuceLibraryCode
 )
 
-# 7. JUCEモジュールのリンク
+# 8. JUCEモジュールのリンク
 target_link_libraries(NEOTO_Pre PRIVATE
     juce::juce_audio_utils
     juce::juce_audio_processors
@@ -103,11 +113,12 @@ target_link_libraries(NEOTO_Pre PRIVATE
     juce::juce_core         
     juce::juce_events
     juce::juce_opengl   # 計画書のOpenGLビジュアライザ要件に対応       
+    NEOTO_Pre_BinaryData # ★ ここに登録したバイナリデータターゲットをリンク
 )
 
-# 8. JUCE 8 固有の設定
+# 9. JUCE 8 固有の設定
 juce_generate_juce_header(NEOTO_Pre)
 
-if(WIN32)  
+if(WIN32)
     target_compile_definitions(NEOTO_Pre PRIVATE JUCE_DIRECT2D=1)
 endif()
