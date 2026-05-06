@@ -25,14 +25,14 @@ void Preamp_API::prepare(double sampleRate) {
     hpfState_dry = 0.0; lpfState_dry = 0.0; lastInput_dry = 0.0;
 }
 
-float Preamp_API::processDrySample(float input, float driveParam, float charParam, float asymParam, float ageParam) {
+float Preamp_API::processDrySample(float input, float driveParam, float charParam, float asymParam, float colorParam, float ageParam) {
     double dInput = static_cast<double>(input);
     double delayed = lastInputADAA_dry1;
     lastInputADAA_dry1 = dInput;
     return static_cast<float>(delayed);
 }
 
-float Preamp_API::processSample(float input, float driveParam, float charParam, float asymParam, float ageParam)
+float Preamp_API::processSample(float input, float driveParam, float charParam, float asymParam, float colorParam, float ageParam)
 {
     if (driveParam != lastDriveParam) {
         double normalizedDrive = static_cast<double>(driveParam) / 100.0;
@@ -113,14 +113,14 @@ void Preamp_Neve::prepare(double sampleRate) {
     lastDriveParam = -1.0f; lastCharParam = -1.0f; lastAsymParam = -1.0f; lastAgeParam = -1.0f;
 }
 
-float Preamp_Neve::processDrySample(float input, float driveParam, float charParam, float asymParam, float ageParam) {
+float Preamp_Neve::processDrySample(float input, float driveParam, float charParam, float asymParam, float colorParam, float ageParam) {
     double dInput = static_cast<double>(input);
     double delayed = lastInputADAA_dry1;
     lastInputADAA_dry1 = dInput;
     return static_cast<float>(delayed);
 }
 
-float Preamp_Neve::processSample(float input, float driveParam, float charParam, float asymParam, float ageParam)
+float Preamp_Neve::processSample(float input, float driveParam, float charParam, float asymParam, float colorParam, float ageParam)
 {
     if (driveParam != lastDriveParam) {
         double normalizedDrive = static_cast<double>(driveParam) / 100.0;
@@ -208,7 +208,7 @@ void Preamp_Tube::prepare(double sampleRate) {
     lastDriveParam = -1.0f; lastCharParam = -1.0f; lastAsymParam = -1.0f; lastAgeParam = -1.0f;
 }
 
-float Preamp_Tube::processDrySample(float input, float driveParam, float charParam, float asymParam, float ageParam) {
+float Preamp_Tube::processDrySample(float input, float driveParam, float charParam, float asymParam, float colorParam, float ageParam) {
     double dInput = static_cast<double>(input);
 
     if (charParam != lastCharParam) {
@@ -229,7 +229,7 @@ float Preamp_Tube::processDrySample(float input, float driveParam, float charPar
     return static_cast<float>(apfOut);
 }
 
-float Preamp_Tube::processSample(float input, float driveParam, float charParam, float asymParam, float ageParam)
+float Preamp_Tube::processSample(float input, float driveParam, float charParam, float asymParam, float colorParam, float ageParam)
 {
     if (driveParam != lastDriveParam) {
         double normalizedDrive = static_cast<double>(driveParam) / 100.0;
@@ -330,14 +330,14 @@ void Preamp_SSL::prepare(double sampleRate) {
     lastDriveParam = -1.0f; lastCharParam = -1.0f; lastAsymParam = -1.0f; lastAgeParam = -1.0f;
 }
 
-float Preamp_SSL::processDrySample(float input, float driveParam, float charParam, float asymParam, float ageParam) {
+float Preamp_SSL::processDrySample(float input, float driveParam, float charParam, float asymParam, float colorParam, float ageParam) {
     double dInput = static_cast<double>(input);
     double delayed = lastInputADAA_dry1;
     lastInputADAA_dry1 = dInput;
     return static_cast<float>(delayed);
 }
 
-float Preamp_SSL::processSample(float input, float driveParam, float charParam, float asymParam, float ageParam)
+float Preamp_SSL::processSample(float input, float driveParam, float charParam, float asymParam, float colorParam, float ageParam)
 {
     if (driveParam != lastDriveParam) {
         double normalizedDrive = static_cast<double>(driveParam) / 100.0;
@@ -406,4 +406,185 @@ float Preamp_SSL::processSample(float input, float driveParam, float charParam, 
 
     double outputWithoutDC = softclipOut - fxBias;
     return static_cast<float>(outputWithoutDC * makeUp * HEADROOM_OUT);
+}
+
+//==============================================================================
+// 5. TG2 Style (Modern 1) 
+// - Characterノブでインピーダンス（300Ω/1200Ω）切り替え
+// - Colorノブでハイパンプ(3kHz~)コントロール
+//==============================================================================
+void Preamp_Modern1::prepare(double sampleRate) {
+    fs = sampleRate;
+    lastInputADAA1 = 0.0; lastInputADAA2 = 0.0;
+    lastInputADAA_dry1 = 0.0; lastInputADAA_dry2 = 0.0;
+    impLpfState = 0.0; impHpfState = 0.0; lastInput = 0.0;
+    impLpfState_dry = 0.0; impHpfState_dry = 0.0; lastInput_dry = 0.0;
+    color_x1 = 0.0; color_x2 = 0.0; color_y1 = 0.0; color_y2 = 0.0;
+    color_x1_dry = 0.0; color_x2_dry = 0.0; color_y1_dry = 0.0; color_y2_dry = 0.0;
+    lastDriveParam = -1.0f; lastCharParam = -1.0f; lastAsymParam = -1.0f; lastAgeParam = -1.0f; lastColorParam = -1.0f;
+}
+
+float Preamp_Modern1::processDrySample(float input, float driveParam, float charParam, float asymParam, float colorParam, float ageParam) {
+    double dInput = static_cast<double>(input);
+    double hpfOut = dInput - lastInput_dry + alphaImpedanceHpf * impHpfState_dry; impHpfState_dry = hpfOut; lastInput_dry = dInput;
+    double lpfOut = hpfOut * (1.0 - alphaImpedanceLpf) + alphaImpedanceLpf * impLpfState_dry; impLpfState_dry = lpfOut;
+    double delayed = lastInputADAA_dry1; lastInputADAA_dry1 = lpfOut;
+    double colorOut = color_b0 * delayed + color_b1 * color_x1_dry + color_b2 * color_x2_dry - color_a1 * color_y1_dry - color_a2 * color_y2_dry;
+    color_x2_dry = color_x1_dry; color_x1_dry = delayed; color_y2_dry = color_y1_dry; color_y1_dry = colorOut;
+    return static_cast<float>(colorOut);
+}
+
+float Preamp_Modern1::processSample(float input, float driveParam, float charParam, float asymParam, float colorParam, float ageParam) {
+    if (driveParam != lastDriveParam) {
+        double driveDb = std::pow(static_cast<double>(driveParam) / 100.0, 2.0) * 28.0;
+        gain = juce::Decibels::decibelsToGain(driveDb);
+        makeUp = 1.0 / (1.0 + (gain - 1.0) * 0.12);
+        lastDriveParam = driveParam;
+    }
+    if (charParam != lastCharParam || ageParam != lastAgeParam) {
+        bool is300Ohm = (charParam >= 50.0f); // インピーダンス切替シミュレーション
+        double fcLpf = is300Ohm ? 16000.0 : 22000.0;
+        double fcHpf = juce::jmap(static_cast<double>(ageParam), 0.0, 100.0, 10.0, 45.0);
+        alphaImpedanceLpf = std::exp(-juce::MathConstants<double>::twoPi * fcLpf / fs);
+        alphaImpedanceHpf = std::exp(-juce::MathConstants<double>::twoPi * fcHpf / fs);
+        lastCharParam = charParam; lastAgeParam = ageParam;
+    }
+    if (asymParam != lastAsymParam) {
+        double norm = static_cast<double>(asymParam) / 100.0;
+        mixEven = 0.1 + (norm * 0.4); // 奇数次主体に2次倍音をブレンド
+        mixOdd = 1.0 - mixEven;
+        bias = norm * 0.2;
+        fxBias = (ADAA_Math::fx_chebyshev_even(bias) * mixEven) + (ADAA_Math::fx_chebyshev_odd(bias) * mixOdd);
+        lastAsymParam = asymParam;
+    }
+    // Color: ハイパンプ (3kHz High Shelf)
+    float currentColorParam = (colorParam != lastColorParam) ? colorParam : lastColorParam;
+    if (currentColorParam != lastColorParam || lastColorParam == -1.0f) {
+        double gainDb = juce::jmap(static_cast<double>(currentColorParam), 0.0, 100.0, 0.0, 2.5);
+        double A = std::pow(10.0, gainDb / 40.0); double w0 = juce::MathConstants<double>::twoPi * 3000.0 / fs;
+        double alphaQ = std::sin(w0) / (2.0 * 0.707);
+        double a0 = (A + 1.0) - (A - 1.0) * std::cos(w0) + 2.0 * std::sqrt(A) * alphaQ;
+        color_b0 = A * ((A + 1.0) + (A - 1.0) * std::cos(w0) + 2.0 * std::sqrt(A) * alphaQ) / a0;
+        color_b1 = -2.0 * A * ((A - 1.0) + (A + 1.0) * std::cos(w0)) / a0;
+        color_b2 = A * ((A + 1.0) + (A - 1.0) * std::cos(w0) - 2.0 * std::sqrt(A) * alphaQ) / a0;
+        color_a1 = 2.0 * ((A - 1.0) - (A + 1.0) * std::cos(w0)) / a0;
+        color_a2 = ((A + 1.0) - (A - 1.0) * std::cos(w0) - 2.0 * std::sqrt(A) * alphaQ) / a0;
+        lastColorParam = currentColorParam;
+    }
+
+    double dIn = static_cast<double>(input);
+    double hpfOut = dIn - lastInput + alphaImpedanceHpf * impHpfState; impHpfState = hpfOut; lastInput = dIn;
+    double lpfOut = hpfOut * (1.0 - alphaImpedanceLpf) + alphaImpedanceLpf * impLpfState; impLpfState = lpfOut;
+
+    double drivenSignal = lpfOut * gain * HEADROOM_IN;
+    double x = drivenSignal + bias;
+    double softclipOut = 0.0;
+
+    if (isAnalyzerMode) {
+        softclipOut = x; lastInputADAA2 = lastInputADAA1; lastInputADAA1 = x;
+    }
+    else {
+        double diff1 = x - lastInputADAA1; double diff2 = lastInputADAA1 - lastInputADAA2; double diff_total = x - lastInputADAA2;
+        auto calcFx = [&](double val) -> double { return (ADAA_Math::fx_chebyshev_even(val) * mixEven) + (ADAA_Math::fx_chebyshev_odd(val) * mixOdd); };
+        auto calcF1 = [&](double val) -> double { return (ADAA_Math::F1_chebyshev_even(val) * mixEven) + (ADAA_Math::F1_chebyshev_odd(val) * mixOdd); };
+        auto calcF2 = [&](double val) -> double { return (ADAA_Math::F2_chebyshev_even(val) * mixEven) + (ADAA_Math::F2_chebyshev_odd(val) * mixOdd); };
+
+        if (std::abs(diff_total) <= ADAA_EPS) softclipOut = calcFx((x + lastInputADAA2) * 0.5);
+        else if (std::abs(diff1) <= ADAA_EPS) { double div2 = (calcF2(lastInputADAA1) - calcF2(lastInputADAA2)) / diff2; softclipOut = (2.0 / diff_total) * (calcF1((x + lastInputADAA1) * 0.5) - div2); }
+        else if (std::abs(diff2) <= ADAA_EPS) { double div1 = (calcF2(x) - calcF2(lastInputADAA1)) / diff1; softclipOut = (2.0 / diff_total) * (div1 - calcF1((lastInputADAA1 + lastInputADAA2) * 0.5)); }
+        else { double div1 = (calcF2(x) - calcF2(lastInputADAA1)) / diff1; double div2 = (calcF2(lastInputADAA1) - calcF2(lastInputADAA2)) / diff2; softclipOut = (2.0 / diff_total) * (div1 - div2); }
+        lastInputADAA2 = lastInputADAA1; lastInputADAA1 = x;
+    }
+
+    double outputWithoutDC = (softclipOut - fxBias) * makeUp * HEADROOM_OUT;
+    double colorOut = color_b0 * outputWithoutDC + color_b1 * color_x1 + color_b2 * color_x2 - color_a1 * color_y1 - color_a2 * color_y2;
+    color_x2 = color_x1; color_x1 = outputWithoutDC; color_y2 = color_y1; color_y1 = colorOut;
+
+    return static_cast<float>(colorOut);
+}
+
+//==============================================================================
+// 6. B173 Style (Modern 2) 
+// - ブライトな高域と太い低域のサチュレーション
+//==============================================================================
+void Preamp_Modern2::prepare(double sampleRate) {
+    fs = sampleRate;
+    lastInputADAA1 = 0.0; lastInputADAA2 = 0.0;
+    lastInputADAA_dry1 = 0.0; lastInputADAA_dry2 = 0.0;
+    lpfState = 0.0; lpfState_dry = 0.0;
+    color_x1 = 0.0; color_x2 = 0.0; color_y1 = 0.0; color_y2 = 0.0;
+    color_x1_dry = 0.0; color_x2_dry = 0.0; color_y1_dry = 0.0; color_y2_dry = 0.0;
+    lastDriveParam = -1.0f; lastCharParam = -1.0f; lastAsymParam = -1.0f; lastAgeParam = -1.0f; lastColorParam = -1.0f;
+}
+
+float Preamp_Modern2::processDrySample(float input, float driveParam, float charParam, float asymParam, float colorParam, float ageParam) {
+    double dInput = static_cast<double>(input);
+    double delayed = lastInputADAA_dry1; lastInputADAA_dry1 = dInput;
+    double colorOut = color_b0 * delayed + color_b1 * color_x1_dry + color_b2 * color_x2_dry - color_a1 * color_y1_dry - color_a2 * color_y2_dry;
+    color_x2_dry = color_x1_dry; color_x1_dry = delayed; color_y2_dry = color_y1_dry; color_y1_dry = colorOut;
+    double lpfOut = colorOut * (1.0 - alphaAgeLpf) + alphaAgeLpf * lpfState_dry; lpfState_dry = lpfOut;
+    return static_cast<float>(lpfOut);
+}
+
+float Preamp_Modern2::processSample(float input, float driveParam, float charParam, float asymParam, float colorParam, float ageParam) {
+    if (driveParam != lastDriveParam) {
+        double driveDb = std::pow(static_cast<double>(driveParam) / 100.0, 3.0) * 22.0;
+        gain = juce::Decibels::decibelsToGain(driveDb);
+        makeUp = 1.0 / (1.0 + (gain - 1.0) * 0.1);
+        lastDriveParam = driveParam;
+    }
+    if (charParam != lastCharParam || asymParam != lastAsymParam) {
+        double norm = static_cast<double>(charParam) / 100.0;
+        mixEven = 0.5 + (norm * 0.5); // 偶数次主体の太い質感
+        mixOdd = 1.0 - mixEven;
+        bias = juce::jmap(static_cast<double>(asymParam), 0.0, 100.0, 0.0, 0.35); // B173特有のDC偏磁
+        fxBias = (ADAA_Math::fx_chebyshev_even(bias) * mixEven) + (ADAA_Math::fx_chebyshev_odd(bias) * mixOdd);
+        lastCharParam = charParam; lastAsymParam = asymParam;
+    }
+    if (ageParam != lastAgeParam) {
+        double fcLpf = juce::jmap(static_cast<double>(ageParam), 0.0, 100.0, 22000.0, 10000.0);
+        alphaAgeLpf = std::exp(-juce::MathConstants<double>::twoPi * fcLpf / fs);
+        lastAgeParam = ageParam;
+    }
+    // Color: ブライトネス (12kHz High Shelf と 80Hz Low Shelfのバランス)
+    float currentColorParam = (colorParam != lastColorParam) ? colorParam : lastColorParam;
+    if (currentColorParam != lastColorParam || lastColorParam == -1.0f) {
+        double gainDb = juce::jmap(static_cast<double>(currentColorParam), 0.0, 100.0, -1.5, 3.0);
+        double A = std::pow(10.0, gainDb / 40.0); double w0 = juce::MathConstants<double>::twoPi * 12000.0 / fs;
+        double alphaQ = std::sin(w0) / (2.0 * 0.707);
+        double a0 = (A + 1.0) - (A - 1.0) * std::cos(w0) + 2.0 * std::sqrt(A) * alphaQ;
+        color_b0 = A * ((A + 1.0) + (A - 1.0) * std::cos(w0) + 2.0 * std::sqrt(A) * alphaQ) / a0;
+        color_b1 = -2.0 * A * ((A - 1.0) + (A + 1.0) * std::cos(w0)) / a0;
+        color_b2 = A * ((A + 1.0) + (A - 1.0) * std::cos(w0) - 2.0 * std::sqrt(A) * alphaQ) / a0;
+        color_a1 = 2.0 * ((A - 1.0) - (A + 1.0) * std::cos(w0)) / a0;
+        color_a2 = ((A + 1.0) - (A - 1.0) * std::cos(w0) - 2.0 * std::sqrt(A) * alphaQ) / a0;
+        lastColorParam = currentColorParam;
+    }
+
+    double drivenSignal = static_cast<double>(input) * gain * HEADROOM_IN;
+    double x = drivenSignal + bias;
+    double softclipOut = 0.0;
+
+    if (isAnalyzerMode) {
+        softclipOut = x; lastInputADAA2 = lastInputADAA1; lastInputADAA1 = x;
+    }
+    else {
+        double diff1 = x - lastInputADAA1; double diff2 = lastInputADAA1 - lastInputADAA2; double diff_total = x - lastInputADAA2;
+        auto calcFx = [&](double val) -> double { return (ADAA_Math::fx_chebyshev_even(val) * mixEven) + (ADAA_Math::fx_chebyshev_odd(val) * mixOdd); };
+        auto calcF1 = [&](double val) -> double { return (ADAA_Math::F1_chebyshev_even(val) * mixEven) + (ADAA_Math::F1_chebyshev_odd(val) * mixOdd); };
+        auto calcF2 = [&](double val) -> double { return (ADAA_Math::F2_chebyshev_even(val) * mixEven) + (ADAA_Math::F2_chebyshev_odd(val) * mixOdd); };
+
+        if (std::abs(diff_total) <= ADAA_EPS) softclipOut = calcFx((x + lastInputADAA2) * 0.5);
+        else if (std::abs(diff1) <= ADAA_EPS) { double div2 = (calcF2(lastInputADAA1) - calcF2(lastInputADAA2)) / diff2; softclipOut = (2.0 / diff_total) * (calcF1((x + lastInputADAA1) * 0.5) - div2); }
+        else if (std::abs(diff2) <= ADAA_EPS) { double div1 = (calcF2(x) - calcF2(lastInputADAA1)) / diff1; softclipOut = (2.0 / diff_total) * (div1 - calcF1((lastInputADAA1 + lastInputADAA2) * 0.5)); }
+        else { double div1 = (calcF2(x) - calcF2(lastInputADAA1)) / diff1; double div2 = (calcF2(lastInputADAA1) - calcF2(lastInputADAA2)) / diff2; softclipOut = (2.0 / diff_total) * (div1 - div2); }
+        lastInputADAA2 = lastInputADAA1; lastInputADAA1 = x;
+    }
+
+    double outputWithoutDC = (softclipOut - fxBias) * makeUp * HEADROOM_OUT;
+    double colorOut = color_b0 * outputWithoutDC + color_b1 * color_x1 + color_b2 * color_x2 - color_a1 * color_y1 - color_a2 * color_y2;
+    color_x2 = color_x1; color_x1 = outputWithoutDC; color_y2 = color_y1; color_y1 = colorOut;
+
+    double lpfOut = colorOut * (1.0 - alphaAgeLpf) + alphaAgeLpf * lpfState; lpfState = lpfOut;
+    return static_cast<float>(lpfOut);
 }

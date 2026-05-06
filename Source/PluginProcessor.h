@@ -77,9 +77,10 @@ private:
     float inPeakState = 0.0f;
     float outPeakState = 0.0f;
 
-    std::unique_ptr<IInputTransformerEngine> inTransEngines[2][5];
+    // ★ トランス配列のサイズを 7 に拡張 (0:None, 1:Nickel, 2:Steel, 3:Iron, 4:Amorphous, 5:Carnhill, 6:Cinemag)
+    std::unique_ptr<IInputTransformerEngine> inTransEngines[2][7];
     std::unique_ptr<IPreampEngine> preampEngines[2][6];
-    std::unique_ptr<IOutputTransformerEngine> outTransEngines[2][5];
+    std::unique_ptr<IOutputTransformerEngine> outTransEngines[2][7];
 
     std::atomic<float>* inputGainParam = nullptr;
     std::atomic<float>* outputGainParam = nullptr;

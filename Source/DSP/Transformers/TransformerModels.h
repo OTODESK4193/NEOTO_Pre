@@ -21,7 +21,7 @@ public:
 private:
     double fs = 44100.0;
     double lastInputADAA = 0.0;
-    double lastInputADAA_dry = 0.0; // ★ Dry
+    double lastInputADAA_dry = 0.0;
 };
 
 class InputTransformer_Steel : public IInputTransformerEngine {
@@ -31,15 +31,8 @@ public:
     float processDrySample(float input) override;
 private:
     double fs = 44100.0;
-    double lastInputADAA = 0.0;
-    double hpfState = 0.0;
-    double lastInput = 0.0;
-    double alphaHpf = 0.0;
-
-    // ★ Dry
-    double lastInputADAA_dry = 0.0;
-    double hpfState_dry = 0.0;
-    double lastInput_dry = 0.0;
+    double lastInputADAA = 0.0, hpfState = 0.0, lastInput = 0.0, alphaHpf = 0.0;
+    double lastInputADAA_dry = 0.0, hpfState_dry = 0.0, lastInput_dry = 0.0;
 };
 
 class InputTransformer_Iron : public IInputTransformerEngine {
@@ -50,7 +43,7 @@ public:
 private:
     double fs = 44100.0;
     double lastInputADAA = 0.0;
-    double lastInputADAA_dry = 0.0; // ★ Dry
+    double lastInputADAA_dry = 0.0;
 };
 
 class InputTransformer_Amorphous : public IInputTransformerEngine {
@@ -61,11 +54,33 @@ public:
 private:
     double fs = 44100.0;
     double lastInputADAA = 0.0;
-    double lastInputADAA_dry = 0.0; // ★ Dry
+    double lastInputADAA_dry = 0.0;
+};
+
+class InputTransformer_Carnhill : public IInputTransformerEngine {
+public:
+    void prepare(double sampleRate) override;
+    float processSample(float input) override;
+    float processDrySample(float input) override;
+private:
+    double fs = 44100.0;
+    double lastInputADAA = 0.0;
+    double lastInputADAA_dry = 0.0;
+};
+
+class InputTransformer_Cinemag : public IInputTransformerEngine {
+public:
+    void prepare(double sampleRate) override;
+    float processSample(float input) override;
+    float processDrySample(float input) override;
+private:
+    double fs = 44100.0;
+    double lastInputADAA = 0.0;
+    double lastInputADAA_dry = 0.0;
 };
 
 // ==============================================================================
-// ヒステリシス・プロセッサ群 (変更なし)
+// Hysteresis Processors
 // ==============================================================================
 class TellinenHysteresis {
 public:
@@ -115,14 +130,15 @@ private:
     double last_H = 0.0; double last_Mirr = 0.0;
 };
 
-//==============================================================================
+// ==============================================================================
 // OUTPUT TRANSFORMERS
-//==============================================================================
+// ==============================================================================
 class OutputTransformer_None : public IOutputTransformerEngine {
 public:
     void prepare(double) override {}
     float processSample(float input, float, float, float) override { return input; }
     float processDrySample(float input, float, float) override { return input; }
+    void setAnalyzerMode(bool) override {}
 };
 
 class OutputTransformer_Amorphous : public IOutputTransformerEngine {
@@ -130,15 +146,13 @@ public:
     void prepare(double sampleRate) override;
     float processSample(float input, float colorParam, float airParam, float ageParam) override;
     float processDrySample(float input, float airParam, float ageParam) override;
-    void setAnalyzerMode(bool isAnalyzer) { isAnalyzerMode = isAnalyzer; }
+    void setAnalyzerMode(bool isAnalyzer) override { isAnalyzerMode = isAnalyzer; }
 private:
     double fs = 44100.0; bool isAnalyzerMode = false;
     float lastColorParam = -1.0f, lastAirParam = -1.0f, lastAgeParam = -1.0f;
     double threshold = 5.0, driveGain = 1.0;
     double x1 = 0.0, x2 = 0.0, y1 = 0.0, y2 = 0.0, b0 = 1.0, b1 = 0.0, b2 = 0.0, a1 = 0.0, a2 = 0.0;
     double lpfState = 0.0, alphaLpf = 0.0;
-
-    // ★ Dry
     double x1_dry = 0.0, x2_dry = 0.0, y1_dry = 0.0, y2_dry = 0.0, lpfState_dry = 0.0;
 };
 
@@ -147,16 +161,13 @@ public:
     void prepare(double sampleRate) override;
     float processSample(float input, float colorParam, float airParam, float ageParam) override;
     float processDrySample(float input, float airParam, float ageParam) override;
-    void setAnalyzerMode(bool isAnalyzer) { isAnalyzerMode = isAnalyzer; }
+    void setAnalyzerMode(bool isAnalyzer) override { isAnalyzerMode = isAnalyzer; }
 private:
     double fs = 44100.0; bool isAnalyzerMode = false;
     double hpfState = 0.0, lastInput = 0.0, apfState = 0.0, lastApfInput = 0.0, lpfState = 0.0;
     double x1 = 0.0, x2 = 0.0, y1 = 0.0, y2 = 0.0, b0 = 1.0, b1 = 0.0, b2 = 0.0, a1 = 0.0, a2 = 0.0;
-
-    // ★ Dry
     double hpfState_dry = 0.0, lastInput_dry = 0.0, apfState_dry = 0.0, lastApfInput_dry = 0.0, lpfState_dry = 0.0;
     double x1_dry = 0.0, x2_dry = 0.0, y1_dry = 0.0, y2_dry = 0.0;
-
     float lastColorParam = -1.0f, lastAirParam = -1.0f, lastAgeParam = -1.0f;
     double alphaHpf = 0.0, apfAlpha = 0.0, alphaLpf = 0.0;
     double hystDrive = 1.0, hystHc = 0.1;
@@ -168,16 +179,13 @@ public:
     void prepare(double sampleRate) override;
     float processSample(float input, float colorParam, float airParam, float ageParam) override;
     float processDrySample(float input, float airParam, float ageParam) override;
-    void setAnalyzerMode(bool isAnalyzer) { isAnalyzerMode = isAnalyzer; }
+    void setAnalyzerMode(bool isAnalyzer) override { isAnalyzerMode = isAnalyzer; }
 private:
     double fs = 44100.0; bool isAnalyzerMode = false;
     double hpfState = 0.0, lastInput = 0.0, lpfState = 0.0;
     double x1 = 0.0, x2 = 0.0, y1 = 0.0, y2 = 0.0, b0 = 1.0, b1 = 0.0, b2 = 0.0, a1 = 0.0, a2 = 0.0;
-
-    // ★ Dry
     double hpfState_dry = 0.0, lastInput_dry = 0.0, lpfState_dry = 0.0;
     double x1_dry = 0.0, x2_dry = 0.0, y1_dry = 0.0, y2_dry = 0.0;
-
     float lastColorParam = -1.0f, lastAirParam = -1.0f, lastAgeParam = -1.0f;
     double alphaHpf = 0.0, alphaLpf = 0.0;
     double hystDrive = 1.0, hystHc = 0.05;
@@ -189,17 +197,48 @@ public:
     void prepare(double sampleRate) override;
     float processSample(float input, float colorParam, float airParam, float ageParam) override;
     float processDrySample(float input, float airParam, float ageParam) override;
-    void setAnalyzerMode(bool isAnalyzer) { isAnalyzerMode = isAnalyzer; }
+    void setAnalyzerMode(bool isAnalyzer) override { isAnalyzerMode = isAnalyzer; }
 private:
     double fs = 44100.0; bool isAnalyzerMode = false;
     float lastColorParam = -1.0f, lastAirParam = -1.0f, lastAgeParam = -1.0f;
     double ja_a = 4.0, ja_k = 0.0001, ja_c = 0.999;
     JAHysteresis hysteresisEngine;
-
     double hpfState = 0.0, lastInput = 0.0, lpfState = 0.0, alphaHpf = 0.0, alphaLpf = 0.0;
     double x1 = 0.0, x2 = 0.0, y1 = 0.0, y2 = 0.0, b0 = 1.0, b1 = 0.0, b2 = 0.0, a1 = 0.0, a2 = 0.0;
+    double hpfState_dry = 0.0, lastInput_dry = 0.0, lpfState_dry = 0.0;
+    double x1_dry = 0.0, x2_dry = 0.0, y1_dry = 0.0, y2_dry = 0.0;
+};
 
-    // ★ Dry
+class OutputTransformer_Carnhill : public IOutputTransformerEngine {
+public:
+    void prepare(double sampleRate) override;
+    float processSample(float input, float colorParam, float airParam, float ageParam) override;
+    float processDrySample(float input, float airParam, float ageParam) override;
+    void setAnalyzerMode(bool isAnalyzer) override { isAnalyzerMode = isAnalyzer; }
+private:
+    double fs = 44100.0; bool isAnalyzerMode = false;
+    float lastColorParam = -1.0f, lastAirParam = -1.0f, lastAgeParam = -1.0f;
+    double ja_a = 35.0, ja_k = 15.0, ja_c = 0.2;
+    JAHysteresis hysteresisEngine;
+    double hpfState = 0.0, lastInput = 0.0, lpfState = 0.0, alphaHpf = 0.0, alphaLpf = 0.0;
+    double x1 = 0.0, x2 = 0.0, y1 = 0.0, y2 = 0.0, b0 = 1.0, b1 = 0.0, b2 = 0.0, a1 = 0.0, a2 = 0.0;
+    double hpfState_dry = 0.0, lastInput_dry = 0.0, lpfState_dry = 0.0;
+    double x1_dry = 0.0, x2_dry = 0.0, y1_dry = 0.0, y2_dry = 0.0;
+};
+
+class OutputTransformer_Cinemag : public IOutputTransformerEngine {
+public:
+    void prepare(double sampleRate) override;
+    float processSample(float input, float colorParam, float airParam, float ageParam) override;
+    float processDrySample(float input, float airParam, float ageParam) override;
+    void setAnalyzerMode(bool isAnalyzer) override { isAnalyzerMode = isAnalyzer; }
+private:
+    double fs = 44100.0; bool isAnalyzerMode = false;
+    float lastColorParam = -1.0f, lastAirParam = -1.0f, lastAgeParam = -1.0f;
+    double ja_a = 550.0, ja_k = 420.0, ja_c = 0.15;
+    JAHysteresis hysteresisEngine;
+    double hpfState = 0.0, lastInput = 0.0, lpfState = 0.0, alphaHpf = 0.0, alphaLpf = 0.0;
+    double x1 = 0.0, x2 = 0.0, y1 = 0.0, y2 = 0.0, b0 = 1.0, b1 = 0.0, b2 = 0.0, a1 = 0.0, a2 = 0.0;
     double hpfState_dry = 0.0, lastInput_dry = 0.0, lpfState_dry = 0.0;
     double x1_dry = 0.0, x2_dry = 0.0, y1_dry = 0.0, y2_dry = 0.0;
 };
