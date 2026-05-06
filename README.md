@@ -60,16 +60,23 @@ Independent selection of Input and Output transformers, utilizing **Jiles-Athert
    `C:\Program Files\Common Files\VST3`
 3. Rescan your plugins in Ableton Live 11.
 
-## Building from Source
-This project uses the [JUCE 8](https://juce.com/) framework. 
-1. Clone the repository.
-2. Open the `.jucer` file in the Projucer.
-3. Export the project to Visual Studio 2022.
-4. Build the project in `Release` mode to ensure maximum DSP performance.
-
 ## Disclaimer & Stability
 This software is provided "as-is", without any warranty of any kind. 
 The DSP core has been strictly engineered to prevent `NaN` generation, zero-division, and memory leaks. The architecture isolates the audio thread from UI operations to maintain host stability under heavy loads.
 
 ## License
 This project is completely free and open-source. It is distributed under the **GPLv3 License** (due to JUCE framework standard open-source licensing). You are free to study, modify, and distribute the source code under the same terms.
+
+## 🎓 Credits
+
+**Developer**: @kijyoumusic (OTODESK)  
+**Music Production Background**: Electronic Music, Sound Design  
+**Target DAW**: Ableton Live 11+  
+**Framework**: JUCE 8.0.8  
+**Platform Support**: Windows 10+
+
+---
+
+## 📞 Support
+
+- **Social**: [@kijyoumusic](https://twitter.com/kijyoumusic)
