@@ -1,7 +1,13 @@
 # NEOTO_Pre
 
-![NEOTO_Pre Screenshot](docs/images/screenshot.png)
-*(Please replace the path above with the actual URL of your screenshot)*
+![Release](https://img.shields.io/badge/release-v1.0-blue)
+![License](https://img.shields.io/badge/license-GPLv3-green)
+![JUCE](https://img.shields.io/badge/JUCE-8.0.8-blue)
+![Platform](https://img.shields.io/badge/platform-Windows%20-lightgrey)
+![Downloads](https://img.shields.io/github/downloads/OTODESK4193/OtodeskSampler/total.svg)
+
+##
+<img src="/Screenshot.jpg" width="600">
 
 ## Overview
 **NEOTO_Pre** is an open-source, highly detailed analog-modeled preamplifier and transformer saturation VST3 plugin. Engineered with rigorous digital signal processing (DSP) principles, it provides authentic vintage warmth, harmonic richness, and dynamic spatial depth to your digital audio workstation.
