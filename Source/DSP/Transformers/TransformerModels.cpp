@@ -164,20 +164,32 @@ float OutputTransformer_Amorphous::processDrySample(float input, float airParam,
     return static_cast<float>(lpfOut);
 }
 
+// --- 置き換え開始位置： OutputTransformer_Steel::prepare の開始行 ---
 void OutputTransformer_Steel::prepare(double sampleRate) {
     fs = sampleRate;
-    hpfState = 0.0; lastInput = 0.0; apfState = 0.0; lastApfInput = 0.0; lpfState = 0.0;
-    hpfState_dry = 0.0; lastInput_dry = 0.0; apfState_dry = 0.0; lastApfInput_dry = 0.0; lpfState_dry = 0.0;
+    hpfState = 0.0; lastInput = 0.0; lpfState = 0.0;
+    hpfState_dry = 0.0; lastInput_dry = 0.0; lpfState_dry = 0.0;
     lastColorParam = -1.0f; lastAirParam = -1.0f; lastAgeParam = -1.0f;
     hysteresisEngine.prepare();
+
+    // ★ 堅牢化: Airフィルタ用状態変数の完全初期化
+    air_x1 = 0.0; air_x2 = 0.0; air_y1 = 0.0; air_y2 = 0.0;
+    air_x1_dry = 0.0; air_x2_dry = 0.0; air_y1_dry = 0.0; air_y2_dry = 0.0;
+    air_b0 = 1.0; air_b1 = 0.0; air_b2 = 0.0; air_a1 = 0.0; air_a2 = 0.0;
 }
 
 float OutputTransformer_Steel::processSample(float input, float colorParam, float airParam, float ageParam) {
     if (colorParam != lastColorParam) {
         double cv = static_cast<double>(colorParam) / 100.0;
-        hystDrive = juce::jmap(cv, 0.0, 1.0, 1.0, 1.75); // スケーリング修正
-        hystHc = juce::jmap(cv, 0.0, 1.0, 1e-6, 0.19);   // Color=0の時のゲート効果防止
+        hystDrive = juce::jmap(cv, 0.0, 1.0, 1.0, 1.75);
+        hystHc = juce::jmap(cv, 0.0, 1.0, 1e-6, 0.19);
         lastColorParam = colorParam;
+    }
+    // ★ 追加: AirパラメータによるHigh Shelf係数の更新
+    if (airParam != lastAirParam) {
+        double cv = static_cast<double>(airParam) / 100.0;
+        calcHighShelf(fs, 5000.0, cv * 3.0, air_b0, air_b1, air_b2, air_a1, air_a2);
+        lastAirParam = airParam;
     }
     if (ageParam != lastAgeParam || alphaHpf == 0.0) {
         double cv = static_cast<double>(ageParam) / 100.0;
@@ -187,28 +199,29 @@ float OutputTransformer_Steel::processSample(float input, float colorParam, floa
         alphaLpf = std::exp(-juce::MathConstants<double>::twoPi * fcLpf / fs);
         lastAgeParam = ageParam;
     }
-    if (airParam != lastAirParam) {
-        double cv = static_cast<double>(airParam) / 100.0;
-        double delayPhase = juce::jmap(cv, 0.0, 1.0, 0.0, 0.8);
-        apfAlpha = (1.0 - delayPhase) / (1.0 + delayPhase);
-        lastAirParam = airParam;
-    }
 
     double dIn = static_cast<double>(input);
     double hpfOut = dIn - lastInput + alphaHpf * hpfState; hpfState = hpfOut; lastInput = dIn;
 
     double hystOut = isAnalyzerMode ? hpfOut : hysteresisEngine.processSample(static_cast<float>(hpfOut), hystDrive, hystHc);
 
-    double apfOut = apfAlpha * hystOut + lastApfInput - apfAlpha * apfState; apfState = apfOut; lastApfInput = hystOut;
-    double lpfOut = apfOut * (1.0 - alphaLpf) + alphaLpf * lpfState; lpfState = lpfOut;
+    // ★ 適用: サチュレーション直後にAirフィルタ(Biquad)を通過させる
+    double airOut = air_b0 * hystOut + air_b1 * air_x1 + air_b2 * air_x2 - air_a1 * air_y1 - air_a2 * air_y2;
+    air_x2 = air_x1; air_x1 = hystOut; air_y2 = air_y1; air_y1 = airOut;
+
+    double lpfOut = airOut * (1.0 - alphaLpf) + alphaLpf * lpfState; lpfState = lpfOut;
     return static_cast<float>(lpfOut);
 }
 
 float OutputTransformer_Steel::processDrySample(float input, float airParam, float ageParam) {
     double dIn = static_cast<double>(input);
     double hpfOut = dIn - lastInput_dry + alphaHpf * hpfState_dry; hpfState_dry = hpfOut; lastInput_dry = dIn;
-    double apfOut = apfAlpha * hpfOut + lastApfInput_dry - apfAlpha * apfState_dry; apfState_dry = apfOut; lastApfInput_dry = hpfOut;
-    double lpfOut = apfOut * (1.0 - alphaLpf) + alphaLpf * lpfState_dry; lpfState_dry = lpfOut;
+
+    // ★ 適用: Dry側におけるAirフィルタパスの構築
+    double airOut = air_b0 * hpfOut + air_b1 * air_x1_dry + air_b2 * air_x2_dry - air_a1 * air_y1_dry - air_a2 * air_y2_dry;
+    air_x2_dry = air_x1_dry; air_x1_dry = hpfOut; air_y2_dry = air_y1_dry; air_y1_dry = airOut;
+
+    double lpfOut = airOut * (1.0 - alphaLpf) + alphaLpf * lpfState_dry; lpfState_dry = lpfOut;
     return static_cast<float>(lpfOut);
 }
 
@@ -218,14 +231,25 @@ void OutputTransformer_Iron::prepare(double sampleRate) {
     hpfState_dry = 0.0; lastInput_dry = 0.0; lpfState_dry = 0.0;
     lastColorParam = -1.0f; lastAirParam = -1.0f; lastAgeParam = -1.0f;
     hysteresisEngine.prepare();
+
+    // ★ 堅牢化: Airフィルタ用状態変数の完全初期化
+    air_x1 = 0.0; air_x2 = 0.0; air_y1 = 0.0; air_y2 = 0.0;
+    air_x1_dry = 0.0; air_x2_dry = 0.0; air_y1_dry = 0.0; air_y2_dry = 0.0;
+    air_b0 = 1.0; air_b1 = 0.0; air_b2 = 0.0; air_a1 = 0.0; air_a2 = 0.0;
 }
 
 float OutputTransformer_Iron::processSample(float input, float colorParam, float airParam, float ageParam) {
     if (colorParam != lastColorParam) {
         double cv = static_cast<double>(colorParam) / 100.0;
-        hystDrive = juce::jmap(cv, 0.0, 1.0, 1.0, 2.2);   // スケーリング修正
-        hystHc = juce::jmap(cv, 0.0, 1.0, 1e-6, 0.11);    // Color=0の時のゲート効果防止
+        hystDrive = juce::jmap(cv, 0.0, 1.0, 1.0, 2.2);
+        hystHc = juce::jmap(cv, 0.0, 1.0, 1e-6, 0.11);
         lastColorParam = colorParam;
+    }
+    // ★ 追加: AirパラメータによるHigh Shelf係数の更新
+    if (airParam != lastAirParam) {
+        double cv = static_cast<double>(airParam) / 100.0;
+        calcHighShelf(fs, 5000.0, cv * 3.2, air_b0, air_b1, air_b2, air_a1, air_a2);
+        lastAirParam = airParam;
     }
     if (ageParam != lastAgeParam || alphaHpf == 0.0) {
         double cv = static_cast<double>(ageParam) / 100.0;
@@ -241,14 +265,23 @@ float OutputTransformer_Iron::processSample(float input, float colorParam, float
 
     double hystOut = isAnalyzerMode ? hpfOut : hysteresisEngine.processSample(static_cast<float>(hpfOut), hystDrive, hystHc);
 
-    double lpfOut = hystOut * (1.0 - alphaLpf) + alphaLpf * lpfState; lpfState = lpfOut;
+    // ★ 適用: サチュレーション直後にAirフィルタ(Biquad)を通過させる
+    double airOut = air_b0 * hystOut + air_b1 * air_x1 + air_b2 * air_x2 - air_a1 * air_y1 - air_a2 * air_y2;
+    air_x2 = air_x1; air_x1 = hystOut; air_y2 = air_y1; air_y1 = airOut;
+
+    double lpfOut = airOut * (1.0 - alphaLpf) + alphaLpf * lpfState; lpfState = lpfOut;
     return static_cast<float>(lpfOut);
 }
 
 float OutputTransformer_Iron::processDrySample(float input, float airParam, float ageParam) {
     double dIn = static_cast<double>(input);
     double hpfOut = dIn - lastInput_dry + alphaHpf * hpfState_dry; hpfState_dry = hpfOut; lastInput_dry = dIn;
-    double lpfOut = hpfOut * (1.0 - alphaLpf) + alphaLpf * lpfState_dry; lpfState_dry = lpfOut;
+
+    // ★ 適用: Dry側におけるAirフィルタパスの構築
+    double airOut = air_b0 * hpfOut + air_b1 * air_x1_dry + air_b2 * air_x2_dry - air_a1 * air_y1_dry - air_a2 * air_y2_dry;
+    air_x2_dry = air_x1_dry; air_x1_dry = hpfOut; air_y2_dry = air_y1_dry; air_y1_dry = airOut;
+
+    double lpfOut = airOut * (1.0 - alphaLpf) + alphaLpf * lpfState_dry; lpfState_dry = lpfOut;
     return static_cast<float>(lpfOut);
 }
 
@@ -258,6 +291,11 @@ void OutputTransformer_Nickel::prepare(double sampleRate) {
     hpfState_dry = 0.0; lastInput_dry = 0.0; lpfState_dry = 0.0;
     lastColorParam = -1.0f; lastAirParam = -1.0f; lastAgeParam = -1.0f;
     hysteresisEngine.prepare();
+
+    // ★ 堅牢化: Airフィルタ用状態変数の完全初期化
+    air_x1 = 0.0; air_x2 = 0.0; air_y1 = 0.0; air_y2 = 0.0;
+    air_x1_dry = 0.0; air_x2_dry = 0.0; air_y1_dry = 0.0; air_y2_dry = 0.0;
+    air_b0 = 1.0; air_b1 = 0.0; air_b2 = 0.0; air_a1 = 0.0; air_a2 = 0.0;
 }
 
 float OutputTransformer_Nickel::processSample(float input, float colorParam, float airParam, float ageParam) {
@@ -266,6 +304,12 @@ float OutputTransformer_Nickel::processSample(float input, float colorParam, flo
         ja_a = juce::jmap(cv, 0.0, 1.0, 4.0, 1.0);
         ja_k = juce::jmap(cv, 0.0, 1.0, 0.0001, 0.01);
         lastColorParam = colorParam;
+    }
+    // ★ 追加: AirパラメータによるHigh Shelf係数の更新
+    if (airParam != lastAirParam) {
+        double cv = static_cast<double>(airParam) / 100.0;
+        calcHighShelf(fs, 5000.0, cv * 3.5, air_b0, air_b1, air_b2, air_a1, air_a2);
+        lastAirParam = airParam;
     }
     if (ageParam != lastAgeParam || alphaHpf == 0.0) {
         double cv = static_cast<double>(ageParam) / 100.0;
@@ -279,19 +323,28 @@ float OutputTransformer_Nickel::processSample(float input, float colorParam, flo
     double dIn = static_cast<double>(input);
     double hpfOut = dIn - lastInput + alphaHpf * hpfState; hpfState = hpfOut; lastInput = dIn;
 
-    // ★ 修正: Nickelの極端な音量低下を防ぐためのメイクアップゲイン適用 (13.33倍)
     double hystOut = isAnalyzerMode ? hpfOut : hysteresisEngine.processSample(static_cast<float>(hpfOut), ja_a, ja_k, ja_c) * 13.33;
 
-    double lpfOut = hystOut * (1.0 - alphaLpf) + alphaLpf * lpfState; lpfState = lpfOut;
+    // ★ 適用: サチュレーション直後にAirフィルタ(Biquad)を通過させる
+    double airOut = air_b0 * hystOut + air_b1 * air_x1 + air_b2 * air_x2 - air_a1 * air_y1 - air_a2 * air_y2;
+    air_x2 = air_x1; air_x1 = hystOut; air_y2 = air_y1; air_y1 = airOut;
+
+    double lpfOut = airOut * (1.0 - alphaLpf) + alphaLpf * lpfState; lpfState = lpfOut;
     return static_cast<float>(lpfOut);
 }
 
 float OutputTransformer_Nickel::processDrySample(float input, float airParam, float ageParam) {
     double dIn = static_cast<double>(input);
     double hpfOut = dIn - lastInput_dry + alphaHpf * hpfState_dry; hpfState_dry = hpfOut; lastInput_dry = dIn;
-    double lpfOut = hpfOut * (1.0 - alphaLpf) + alphaLpf * lpfState_dry; lpfState_dry = lpfOut;
+
+    // ★ 適用: Dry側におけるAirフィルタパスの構築
+    double airOut = air_b0 * hpfOut + air_b1 * air_x1_dry + air_b2 * air_x2_dry - air_a1 * air_y1_dry - air_a2 * air_y2_dry;
+    air_x2_dry = air_x1_dry; air_x1_dry = hpfOut; air_y2_dry = air_y1_dry; air_y1_dry = airOut;
+
+    double lpfOut = airOut * (1.0 - alphaLpf) + alphaLpf * lpfState_dry; lpfState_dry = lpfOut;
     return static_cast<float>(lpfOut);
 }
+
 
 void OutputTransformer_Carnhill::prepare(double sampleRate) {
     fs = sampleRate;
