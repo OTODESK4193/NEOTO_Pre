@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include <algorithm> // std::clamp用
 
 NeotoPreAudioProcessor::NeotoPreAudioProcessor()
 #ifndef JucePlugin_PreferredChannelConfigurations
@@ -159,6 +160,45 @@ void NeotoPreAudioProcessor::releaseResources()
     for (auto& os : oversamplers) os->reset();
 }
 
+// ------------------------------------------------------------------------------
+// ★ O(N) の解析処理をAudioThreadからGUI/Workerスレッドへ分離
+// ------------------------------------------------------------------------------
+void NeotoPreAudioProcessor::executeAnalyzer(float seconds)
+{
+    for (int ch = 0; ch < getTotalNumInputChannels(); ++ch) {
+        autoLevels[ch].analyzeRMS(seconds);
+    }
+
+    float dryEnergyL = autoLevels[0].getLatestDryRMS();
+    float wetEnergyL = autoLevels[0].getLatestWetRMS();
+    float dryEnergyR = getTotalNumInputChannels() > 1 ? autoLevels[1].getLatestDryRMS() : dryEnergyL;
+    float wetEnergyR = getTotalNumInputChannels() > 1 ? autoLevels[1].getLatestWetRMS() : wetEnergyL;
+
+    float totalDryEnergy = dryEnergyL + dryEnergyR;
+    float totalWetEnergy = wetEnergyL + wetEnergyR;
+
+    const float lufsOffset = -0.691f;
+    float dryLufs = -100.0f;
+    float wetLufs = -100.0f;
+
+    if (totalDryEnergy > 1e-10f) dryLufs = 10.0f * std::log10(totalDryEnergy) + lufsOffset;
+    if (totalWetEnergy > 1e-10f) wetLufs = 10.0f * std::log10(totalWetEnergy) + lufsOffset;
+
+    latestAnalysisResult.dryRmsL = dryLufs;
+    latestAnalysisResult.wetRmsL = wetLufs;
+    latestAnalysisResult.dryRmsR = 0.0f; // Simplified for monocompatible result
+    latestAnalysisResult.wetRmsR = 0.0f;
+
+    if (totalWetEnergy > 1e-10f && totalDryEnergy > 1e-10f) {
+        latestAnalysisResult.suggestedGainDb = dryLufs - wetLufs;
+    }
+    else {
+        latestAnalysisResult.suggestedGainDb = 0.0f;
+    }
+
+    hasNewAnalysisResult.store(true);
+}
+
 #ifndef JucePlugin_PreferredChannelConfigurations
 bool NeotoPreAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
 {
@@ -168,6 +208,7 @@ bool NeotoPreAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) 
     return true;
 }
 #endif
+
 void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
     juce::ScopedNoDenormals noDenormals;
@@ -200,51 +241,15 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
         setLatencySamples(latency);
     }
 
-    if (triggerAnalyze.exchange(false))
-    {
-        int timeSelection = static_cast<int>(analysisTimeParam->load());
-        float seconds = (timeSelection == 0) ? 1.0f : (timeSelection == 1) ? 3.0f : (timeSelection == 2) ? 5.0f : 10.0f;
-
-        for (int ch = 0; ch < totalNumInputChannels; ++ch) autoLevels[ch].analyzeRMS(seconds);
-
-        float dryEnergyL = autoLevels[0].getLatestDryRMS();
-        float wetEnergyL = autoLevels[0].getLatestWetRMS();
-        float dryEnergyR = totalNumInputChannels > 1 ? autoLevels[1].getLatestDryRMS() : dryEnergyL;
-        float wetEnergyR = totalNumInputChannels > 1 ? autoLevels[1].getLatestWetRMS() : wetEnergyL;
-
-        float totalDryEnergy = dryEnergyL + dryEnergyR;
-        float totalWetEnergy = wetEnergyL + wetEnergyR;
-
-        const float lufsOffset = -0.691f;
-        float dryLufs = -100.0f;
-        float wetLufs = -100.0f;
-
-        if (totalDryEnergy > 1e-10f) dryLufs = 10.0f * std::log10(totalDryEnergy) + lufsOffset;
-        if (totalWetEnergy > 1e-10f) wetLufs = 10.0f * std::log10(totalWetEnergy) + lufsOffset;
-
-        latestAnalysisResult.dryRmsL = dryLufs;
-        latestAnalysisResult.wetRmsL = wetLufs;
-        latestAnalysisResult.dryRmsR = 0.0f;
-        latestAnalysisResult.wetRmsR = 0.0f;
-
-        if (totalWetEnergy > 1e-10f && totalDryEnergy > 1e-10f) {
-            latestAnalysisResult.suggestedGainDb = dryLufs - wetLufs;
-        }
-        else {
-            latestAnalysisResult.suggestedGainDb = 0.0f;
-        }
-
-        hasNewAnalysisResult.store(true);
-    }
-
     float targetInGain = juce::Decibels::decibelsToGain(inputGainParam->load());
     float targetOutGain = juce::Decibels::decibelsToGain(outputGainParam->load());
     float targetMix = mixParam->load() / 100.0f;
     bool isListenDry = listenModeParam->load() > 0.5f;
 
-    int currentInTransIdx = static_cast<int>(inTransParam->load());
-    int currentPreampIdx = static_cast<int>(preampModelParam->load());
-    int currentOutTransIdx = static_cast<int>(outTransParam->load());
+    // ★ セグメンテーション違反を完全に防ぐためのインデックス制限 (std::clamp)
+    int currentInTransIdx = std::clamp(static_cast<int>(inTransParam->load()), 0, 4);
+    int currentPreampIdx = std::clamp(static_cast<int>(preampModelParam->load()), 0, 5);
+    int currentOutTransIdx = std::clamp(static_cast<int>(outTransParam->load()), 0, 4);
 
     for (int i = 0; i < 2; ++i) {
         inputGainSmoother[i].setTargetValue(targetInGain);
@@ -289,15 +294,11 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
 
         for (int sample = 0; sample < numSamplesHigh; ++sample) {
             float wetSignal = channelData[sample];
-
-            // ★ 高解像度空間で抽出した入力値をDry信号として使用
             float drySignal = wetSignal;
 
-            // 1. Input Transformer (Wet & Dry並走)
             wetSignal = inTransEngines[channel][currentInTransIdx]->processSample(wetSignal);
             drySignal = inTransEngines[channel][currentInTransIdx]->processDrySample(drySignal);
 
-            // 2. Preamp (Wet & Dry並走)
             wetSignal = preampEngines[channel][currentPreampIdx]->processSample(wetSignal,
                 driveSmoother[channel].getNextValue(),
                 charSmoother[channel].getNextValue(),
@@ -305,12 +306,11 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
                 ageSmoother[channel].getNextValue());
 
             drySignal = preampEngines[channel][currentPreampIdx]->processDrySample(drySignal,
-                driveSmoother[channel].getCurrentValue(), // Smootherの値を合わせる
+                driveSmoother[channel].getCurrentValue(),
                 charSmoother[channel].getCurrentValue(),
                 asymSmoother[channel].getCurrentValue(),
                 ageSmoother[channel].getCurrentValue());
 
-            // 3. Output Transformer (Wet & Dry並走)
             wetSignal = outTransEngines[channel][currentOutTransIdx]->processSample(wetSignal,
                 colorSmoother[channel].getNextValue(),
                 airSmoother[channel].getNextValue(),
@@ -320,11 +320,8 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
                 airSmoother[channel].getCurrentValue(),
                 ageSmoother[channel].getCurrentValue());
 
-            // 4. 完全な同相での Blend (Dry/Wet Mix)
             float mixRatio = mixSmoother[channel].getNextValue();
             float mixedSignal = drySignal + (wetSignal - drySignal) * mixRatio;
-
-            // Listen モードの適用
             float postMixSignal = isListenDry ? drySignal : mixedSignal;
 
             channelData[sample] = postMixSignal;
@@ -344,9 +341,7 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
 
         for (int sample = 0; sample < numSamples; ++sample) {
             float finalSignal = channelData[sample] * outputGainSmoother[channel].getNextValue();
-
             autoLevels[channel].pushWetSample(finalSignal);
-
             channelData[sample] = finalSignal;
             currentBlockOutPeak = std::max(currentBlockOutPeak, std::abs(finalSignal));
 

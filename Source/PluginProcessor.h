@@ -1,11 +1,9 @@
 #pragma once
-
 #include <JuceHeader.h>
 #include <vector>
 #include <memory>
 #include <atomic>
 #include <array>
-
 #include "DSP/Core/AutoLevel.h"
 #include "DSP/Algorithms/PreampModels.h"
 #include "DSP/Transformers/TransformerModels.h"
@@ -52,24 +50,20 @@ public:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     juce::AudioProcessorValueTreeState apvts;
 
+    // ==============================================================================
+    // GUIとDSPスレッドを切り離すための解析システム
+    // ==============================================================================
     std::atomic<bool> triggerAnalyze{ false };
     AutoLevelAnalysisResult latestAnalysisResult;
     std::atomic<bool> hasNewAnalysisResult{ false };
 
-    // ==============================================================================
-    // GUI用 ピークメーター・レベル (dB)
-    // ==============================================================================
+    // RMS解析をAudioThread外で実行するためのパブリックメソッド
+    void executeAnalyzer(float seconds);
+
     std::atomic<float> inputPeakDb{ -60.0f };
     std::atomic<float> outputPeakDb{ -60.0f };
-
-    // ==============================================================================
-    // 倍音（THD）表示用 (1st to 7th)
-    // ==============================================================================
     std::atomic<float> harmonicLevels[7];
 
-    // ==============================================================================
-    // スペクトラム・アナライザー用 FIFOバッファ
-    // ==============================================================================
     juce::AbstractFifo audioFifo{ 8192 };
     std::array<float, 8192> audioFifoBuffer;
     void pushNextSampleIntoFifo(float sample) noexcept;
@@ -80,7 +74,6 @@ private:
     double currentSampleRate = 44100.0;
     std::array<AutoLevel, 2> autoLevels;
 
-    // ピーク計測用の状態変数 (内部計算用)
     float inPeakState = 0.0f;
     float outPeakState = 0.0f;
 

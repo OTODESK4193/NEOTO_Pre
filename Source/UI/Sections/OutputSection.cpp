@@ -7,7 +7,6 @@ OutputSection::OutputSection(NeotoPreAudioProcessor& p) : audioProcessor(p)
 
     outGainSlider.setLookAndFeel(&arcLnF);
     mixSlider.setLookAndFeel(&arcLnF);
-    // Outputセクションは白固定
     outGainSlider.setColour(juce::Slider::rotarySliderFillColourId, juce::Colours::white);
     mixSlider.setColour(juce::Slider::rotarySliderFillColourId, juce::Colours::white);
 
@@ -26,7 +25,8 @@ OutputSection::OutputSection(NeotoPreAudioProcessor& p) : audioProcessor(p)
     analyzeButton.setButtonText("Analyze");
     analyzeButton.setColour(juce::TextButton::buttonColourId, juce::Colours::darkcyan);
     analyzeButton.onClick = [this] {
-        audioProcessor.triggerAnalyze = true;
+        // ★ AudioThreadをブロックせず、GUIスレッドへのシグナルのみを発行
+        audioProcessor.triggerAnalyze.store(true);
         dryResultLabel.setText("Analyzing...", juce::dontSendNotification);
         wetResultLabel.setText("", juce::dontSendNotification);
         suggestResultLabel.setText("", juce::dontSendNotification);
@@ -81,6 +81,13 @@ void OutputSection::setupRotarySlider(juce::Slider& slider, juce::Label& label, 
 }
 
 void OutputSection::timerCallback() {
+    // ★ ここで AudioThread の外 (Message Thread) で安全に解析処理を実行
+    if (audioProcessor.triggerAnalyze.exchange(false)) {
+        int timeSelection = static_cast<int>(audioProcessor.apvts.getRawParameterValue("analysis_time")->load());
+        float seconds = (timeSelection == 0) ? 1.0f : (timeSelection == 1) ? 3.0f : (timeSelection == 2) ? 5.0f : 10.0f;
+        audioProcessor.executeAnalyzer(seconds);
+    }
+
     if (audioProcessor.hasNewAnalysisResult.exchange(false)) {
         auto& res = audioProcessor.latestAnalysisResult;
         dryResultLabel.setText(juce::String::formatted("Dry: %.1f LUFS", res.dryRmsL), juce::dontSendNotification);
@@ -99,13 +106,7 @@ void OutputSection::paint(juce::Graphics& g) {
     g.setFont(juce::FontOptions(15.0f));
     g.drawText("OUTPUT & MATCHING", getLocalBounds().removeFromTop(30), juce::Justification::centred, false);
 
-    // ==============================================================================
-    // ★ 縦型 次数別倍音（THD）バーグラフの動的描画
-    // ==============================================================================
     auto bounds = getLocalBounds().reduced(10);
-
-    // resized() で使われた上部のUI要素高さを計算して避ける (20+95+5+24+5+20 = 169)
-    // マージンを持たせてトップから 170px を除外した残りの全領域をTHDバーに割り当てる
     auto thdArea = bounds.withTrimmedTop(170);
 
     g.setFont(juce::FontOptions(10.0f));
@@ -124,10 +125,9 @@ void OutputSection::paint(juce::Graphics& g) {
 
         juce::Rectangle<float> barRect(x, y, barWidth, barHeight);
 
-        // 色分け: 基音(白), 偶数(オレンジ), 奇数(シアン)
         if (i == 0) g.setColour(juce::Colours::white);
-        else if (i % 2 != 0) g.setColour(juce::Colour(0xffffaa00)); // 2nd, 4th, 6th
-        else g.setColour(juce::Colour(0xff00d4ff)); // 3rd, 5th, 7th
+        else if (i % 2 != 0) g.setColour(juce::Colour(0xffffaa00));
+        else g.setColour(juce::Colour(0xff00d4ff));
 
         g.fillRoundedRectangle(barRect, 2.0f);
 
@@ -141,7 +141,6 @@ void OutputSection::resized() {
     auto area = getLocalBounds().reduced(10);
     area.removeFromTop(20);
 
-    // ★ Row 1: 左側にGainとMix、右側に3行のボタン
     auto topBlock = area.removeFromTop(95);
 
     auto outGainArea = topBlock.removeFromLeft(85);
@@ -152,7 +151,6 @@ void OutputSection::resized() {
     mixLabel.setBounds(mixArea.removeFromTop(20));
     mixSlider.setBounds(mixArea.withSizeKeepingCentre(75, 75));
 
-    // ボタンの幅をAnalyze(90px)に統一し、3行に配置
     auto btnArea = topBlock.removeFromLeft(100).withTrimmedLeft(10);
     int btnHeight = 26;
     int btnSpacing = 8;
@@ -164,19 +162,15 @@ void OutputSection::resized() {
 
     area.removeFromTop(5);
 
-    // ★ Row 2: コンボボックス
     auto timeRow = area.removeFromTop(24);
     timeComboLabel.setBounds(timeRow.removeFromLeft(90));
     timeCombo.setBounds(timeRow.removeFromLeft(100).reduced(0, 2));
 
     area.removeFromTop(5);
 
-    // ★ Row 3: 結果ラベルを1行に配置
     auto labelRow = area.removeFromTop(20);
     int labelWidth = labelRow.getWidth() / 3;
     dryResultLabel.setBounds(labelRow.removeFromLeft(labelWidth));
     wetResultLabel.setBounds(labelRow.removeFromLeft(labelWidth));
     suggestResultLabel.setBounds(labelRow.removeFromLeft(labelWidth));
-
-    // 残りの広大なエリアが paint() にて THD 倍音バーグラフとして使用されます
 }

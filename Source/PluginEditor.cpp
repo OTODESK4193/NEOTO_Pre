@@ -3,7 +3,7 @@
 
 NeotoPreAudioProcessorEditor::NeotoPreAudioProcessorEditor(NeotoPreAudioProcessor& p)
     : AudioProcessorEditor(&p), audioProcessor(p),
-    analyzer(p), inputSec(p), driveSec(p), transSec(p), outputSec(p) // ★ analyzer(p) を追加
+    analyzer(p), inputSec(p), driveSec(p), transSec(p), outputSec(p)
 {
     addAndMakeVisible(inMeter);
     addAndMakeVisible(outMeter);
@@ -17,7 +17,12 @@ NeotoPreAudioProcessorEditor::NeotoPreAudioProcessorEditor(NeotoPreAudioProcesso
     startTimerHz(60);
 }
 
-NeotoPreAudioProcessorEditor::~NeotoPreAudioProcessorEditor() { stopTimer(); }
+NeotoPreAudioProcessorEditor::~NeotoPreAudioProcessorEditor()
+{
+    stopTimer();
+    // ★ ライフサイクル終了時の強制破棄処理: Ableton Live 11等でのクラッシュを防御
+    removeAllChildren();
+}
 
 void NeotoPreAudioProcessorEditor::timerCallback()
 {
@@ -39,9 +44,8 @@ void NeotoPreAudioProcessorEditor::resized()
     outMeter.setBounds(area.removeFromRight(30));
     area.removeFromRight(15);
 
-    // ★ アナライザーの高さを 360px まで大拡張 (余白を詰める)
     analyzer.setBounds(area.removeFromTop(360));
-    area.removeFromTop(10); // 隙間を15pxから10pxへ圧縮
+    area.removeFromTop(10);
 
     auto bottomTier = area;
     int standardWidth = 170;
