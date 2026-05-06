@@ -5,14 +5,15 @@ InputSection::InputSection(NeotoPreAudioProcessor& p) : audioProcessor(p)
     setupRotarySlider(inputGainSlider, inputGainLabel, "Input Gain");
     inputGainSlider.setLookAndFeel(&arcLnF);
 
-    osModeCombo.addItemList({ "Off (1x)", "2x", "4x", "8x" }, 1); // ★ "8x" を追加
+    osModeCombo.addItemList({ "Off (1x)", "2x", "4x", "8x" }, 1);
     addAndMakeVisible(osModeCombo);
 
     osModeLabel.setText("Oversampling", juce::dontSendNotification);
     osModeLabel.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(osModeLabel);
 
-    inTransCombo.addItemList({ "None", "Nickel", "Steel", "Iron", "Amorphous" }, 1);
+    // ★ Carnhill, Cinemag を追加 (合計7項目)
+    inTransCombo.addItemList({ "None", "Nickel", "Steel", "Iron", "Amorphous", "Carnhill", "Cinemag" }, 1);
     addAndMakeVisible(inTransCombo);
     inTransLabel.setText("Input Transformer", juce::dontSendNotification);
     inTransLabel.setJustificationType(juce::Justification::centred);
@@ -26,11 +27,14 @@ InputSection::InputSection(NeotoPreAudioProcessor& p) : audioProcessor(p)
     auto updateColors = [this] {
         int id = inTransCombo.getSelectedItemIndex();
         juce::Colour c = juce::Colours::cyan;
-        if (id == 0) c = juce::Colour(0xff888888); // None: Grey
+        if (id == 0)      c = juce::Colour(0xff888888); // None: Grey
         else if (id == 1) c = juce::Colour(0xff00d4ff); // Nickel: Cyan
         else if (id == 2) c = juce::Colour(0xffff5555); // Steel: Red
         else if (id == 3) c = juce::Colour(0xffffaa00); // Iron: Orange
         else if (id == 4) c = juce::Colour(0xffcc55ff); // Amorph: Purple
+        else if (id == 5) c = juce::Colours::white;     // Carnhill: White
+        else if (id == 6) c = juce::Colour(0xff88ccff); // Cinemag: Light Blue
+
         inputGainSlider.setColour(juce::Slider::rotarySliderFillColourId, c);
         repaint();
         };

@@ -10,7 +10,8 @@ TransformerSection::TransformerSection(NeotoPreAudioProcessor& p) : audioProcess
     airSlider.setLookAndFeel(&arcLnF);
     ageSlider.setLookAndFeel(&arcLnF);
 
-    outTransCombo.addItemList({ "None", "Nickel", "Steel", "Iron", "Amorphous" }, 1);
+    // ★ Carnhill, Cinemag を追加 (合計7項目)
+    outTransCombo.addItemList({ "None", "Nickel", "Steel", "Iron", "Amorphous", "Carnhill", "Cinemag" }, 1);
     addAndMakeVisible(outTransCombo);
     outTransLabel.setText("Output Transformer", juce::dontSendNotification);
     outTransLabel.setJustificationType(juce::Justification::centred);
@@ -25,11 +26,13 @@ TransformerSection::TransformerSection(NeotoPreAudioProcessor& p) : audioProcess
     auto updateColors = [this] {
         int id = outTransCombo.getSelectedItemIndex();
         juce::Colour c = juce::Colours::cyan;
-        if (id == 0) c = juce::Colour(0xff888888);
-        else if (id == 1) c = juce::Colour(0xff00d4ff);
-        else if (id == 2) c = juce::Colour(0xffff5555);
-        else if (id == 3) c = juce::Colour(0xffffaa00);
-        else if (id == 4) c = juce::Colour(0xffcc55ff);
+        if (id == 0)      c = juce::Colour(0xff888888); // None
+        else if (id == 1) c = juce::Colour(0xff00d4ff); // Nickel
+        else if (id == 2) c = juce::Colour(0xffff5555); // Steel
+        else if (id == 3) c = juce::Colour(0xffffaa00); // Iron
+        else if (id == 4) c = juce::Colour(0xffcc55ff); // Amorphous
+        else if (id == 5) c = juce::Colours::white;     // Carnhill
+        else if (id == 6) c = juce::Colour(0xff88ccff); // Cinemag
 
         colorSlider.setColour(juce::Slider::rotarySliderFillColourId, c);
         airSlider.setColour(juce::Slider::rotarySliderFillColourId, c);

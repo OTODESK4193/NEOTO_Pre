@@ -3,7 +3,6 @@
 #include "PluginEditor.h"
 #include <algorithm> // std::clamp用
 
-//==============================================================================
 NeotoPreAudioProcessor::NeotoPreAudioProcessor()
 #ifndef JucePlugin_PreferredChannelConfigurations
     : AudioProcessor(BusesProperties()
@@ -42,7 +41,6 @@ NeotoPreAudioProcessor::NeotoPreAudioProcessor()
             2, i, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, true);
     }
 
-    // [堅牢性確保] オブジェクトのインスタンス化のみをコンストラクタで実行する
     for (int ch = 0; ch < 2; ++ch) {
         inTransEngines[ch][0] = std::make_unique<InputTransformer_None>();
         inTransEngines[ch][1] = std::make_unique<InputTransformer_Nickel>();
@@ -56,8 +54,8 @@ NeotoPreAudioProcessor::NeotoPreAudioProcessor()
         preampEngines[ch][1] = std::make_unique<Preamp_Neve>();
         preampEngines[ch][2] = std::make_unique<Preamp_Tube>();
         preampEngines[ch][3] = std::make_unique<Preamp_SSL>();
-        preampEngines[ch][4] = std::make_unique<Preamp_Modern1>(); // TG2
-        preampEngines[ch][5] = std::make_unique<Preamp_Modern2>(); // B173
+        preampEngines[ch][4] = std::make_unique<Preamp_Modern1>();
+        preampEngines[ch][5] = std::make_unique<Preamp_Modern2>();
 
         outTransEngines[ch][0] = std::make_unique<OutputTransformer_None>();
         outTransEngines[ch][1] = std::make_unique<OutputTransformer_Nickel>();
@@ -132,7 +130,6 @@ void NeotoPreAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBloc
         inputGainSmoother[i].reset(sampleRate, 0.02);
         outputGainSmoother[i].reset(sampleRate, 0.15);
         mixSmoother[i].reset(sampleRate, 0.02);
-
         inputGainSmoother[i].setCurrentAndTargetValue(juce::Decibels::decibelsToGain(inputGainParam->load()));
         outputGainSmoother[i].setCurrentAndTargetValue(juce::Decibels::decibelsToGain(outputGainParam->load()));
         mixSmoother[i].setCurrentAndTargetValue(mixParam->load() / 100.0f);
@@ -140,7 +137,6 @@ void NeotoPreAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBloc
 
     double oversampledRate = sampleRate * (1 << currentOsMode);
 
-    // [堅牢性確保] 追加したトランス(0〜6)に合わせて限界インデックスを正確に設定
     for (int ch = 0; ch < 2; ++ch) {
         for (int i = 0; i < 7; ++i) inTransEngines[ch][i]->prepare(oversampledRate);
         for (int i = 0; i < 6; ++i) preampEngines[ch][i]->prepare(oversampledRate);
@@ -230,7 +226,6 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
         currentOsMode = newOsMode;
         double newRate = currentSampleRate * (1 << currentOsMode);
         for (int ch = 0; ch < 2; ++ch) {
-            // [堅牢性確保] インデックスを厳格に修正 (in=7, pre=6, out=7)
             for (int i = 0; i < 7; ++i) inTransEngines[ch][i]->prepare(newRate);
             for (int i = 0; i < 6; ++i) preampEngines[ch][i]->prepare(newRate);
             for (int i = 0; i < 7; ++i) outTransEngines[ch][i]->prepare(newRate);
@@ -252,7 +247,6 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
     float targetMix = mixParam->load() / 100.0f;
     bool isListenDry = listenModeParam->load() > 0.5f;
 
-    // [防御的プログラミング] セグメンテーション違反を完全に防ぐためのインデックス制限
     int currentInTransIdx = std::clamp(static_cast<int>(inTransParam->load()), 0, 6);
     int currentPreampIdx = std::clamp(static_cast<int>(preampModelParam->load()), 0, 5);
     int currentOutTransIdx = std::clamp(static_cast<int>(outTransParam->load()), 0, 6);
@@ -272,9 +266,6 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
     float currentBlockInPeak = 0.0f;
     float currentBlockOutPeak = 0.0f;
 
-    // ==============================================================================
-    // [Phase 1] Input Gain & AutoLevel Dry Tracking
-    // ==============================================================================
     for (int channel = 0; channel < totalNumInputChannels; ++channel) {
         float* channelData = buffer.getWritePointer(channel);
         for (int sample = 0; sample < numSamples; ++sample) {
@@ -285,9 +276,6 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
         }
     }
 
-    // ==============================================================================
-    // [Phase 2] Oversampling & DSP (True Ghost Path)
-    // ==============================================================================
     juce::dsp::AudioBlock<float> block(buffer);
     juce::dsp::AudioBlock<float> upsampledBlock;
     if (currentOsMode > 0) upsampledBlock = oversamplers[currentOsMode]->processSamplesUp(block);
@@ -300,8 +288,6 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
 
         for (int sample = 0; sample < numSamplesHigh; ++sample) {
 
-            // [堅牢性確保] 1サンプルごとにSmootherの値を1度だけ取得し、全パスで共有する。
-            // これにより状態の多重進行を防ぎ、Dry/Wetで同一のパラメーター特性を保証する。
             float curDrive = driveSmoother[channel].getNextValue();
             float curChar = charSmoother[channel].getNextValue();
             float curAsym = asymSmoother[channel].getNextValue();
@@ -316,10 +302,10 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
             drySignal = inTransEngines[channel][currentInTransIdx]->processDrySample(drySignal);
 
             wetSignal = preampEngines[channel][currentPreampIdx]->processSample(
-                wetSignal, curDrive, curChar, curAsym, curColor, curAge);
+                wetSignal, curDrive, curChar, curAsym, curAge, curColor);
 
             drySignal = preampEngines[channel][currentPreampIdx]->processDrySample(
-                drySignal, curDrive, curChar, curAsym, curColor, curAge);
+                drySignal, curDrive, curChar, curAsym, curAge, curColor);
 
             wetSignal = outTransEngines[channel][currentOutTransIdx]->processSample(
                 wetSignal, curColor, curAir, curAge);
@@ -335,14 +321,8 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
         }
     }
 
-    // ==============================================================================
-    // [Phase 3] Downsampling
-    // ==============================================================================
     if (currentOsMode > 0) oversamplers[currentOsMode]->processSamplesDown(block);
 
-    // ==============================================================================
-    // [Phase 4] Output Gain & AutoLevel Wet Tracking
-    // ==============================================================================
     for (int channel = 0; channel < totalNumInputChannels; ++channel) {
         float* channelData = buffer.getWritePointer(channel);
 
@@ -356,9 +336,6 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
         }
     }
 
-    // ==============================================================================
-    // ピークの保持と減衰計算
-    // ==============================================================================
     float blockDecay = static_cast<float>(std::exp(-1.0 / (0.1 * currentSampleRate) * numSamples));
     inPeakState = std::max(currentBlockInPeak, inPeakState * blockDecay);
     outPeakState = std::max(currentBlockOutPeak, outPeakState * blockDecay);

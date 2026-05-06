@@ -1,20 +1,20 @@
 #pragma once
 #include <JuceHeader.h>
 #include "../../PluginProcessor.h"
-#include "../../GUI/ArcDial.h" // 追加
+#include "../../GUI/ArcDial.h" 
 
 class DriveSection : public juce::Component
 {
 public:
     DriveSection(NeotoPreAudioProcessor& p);
-    ~DriveSection() override; // デストラクタの宣言を追加！
+    ~DriveSection() override;
 
     void paint(juce::Graphics& g) override;
     void resized() override;
 
 private:
     NeotoPreAudioProcessor& audioProcessor;
-    ArcDialLookAndFeel arcLnF; // スキンを追加
+    ArcDialLookAndFeel arcLnF;
 
     void setupRotarySlider(juce::Slider& slider, juce::Label& label, const juce::String& name);
 
