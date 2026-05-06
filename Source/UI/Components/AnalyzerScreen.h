@@ -19,7 +19,6 @@ private:
     void generateEQCurve();
     void calculateHarmonics();
 
-    // 座標変換関数
     float getPositionForFrequency(float freq, float width);
     float getFrequencyForPosition(float x, float width);
 
@@ -41,8 +40,8 @@ private:
     InputTransformer_Steel     virtualIn_Steel;
     InputTransformer_Iron      virtualIn_Iron;
     InputTransformer_Amorphous virtualIn_Amorphous;
-    InputTransformer_Carnhill  virtualIn_Carnhill; // ★追加
-    InputTransformer_Cinemag   virtualIn_Cinemag;  // ★追加
+    InputTransformer_Carnhill  virtualIn_Carnhill;
+    InputTransformer_Cinemag   virtualIn_Cinemag;
 
     // プリアンプの仮想インスタンス
     Preamp_API virtualPreamp_API;
@@ -57,8 +56,8 @@ private:
     OutputTransformer_Steel     virtualOut_Steel;
     OutputTransformer_Iron      virtualOut_Iron;
     OutputTransformer_Amorphous virtualOut_Amorphous;
-    OutputTransformer_Carnhill  virtualOut_Carnhill; // ★追加
-    OutputTransformer_Cinemag   virtualOut_Cinemag;  // ★追加
+    OutputTransformer_Carnhill  virtualOut_Carnhill;
+    OutputTransformer_Cinemag   virtualOut_Cinemag;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AnalyzerScreen)
 };

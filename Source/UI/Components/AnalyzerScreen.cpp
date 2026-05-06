@@ -4,8 +4,8 @@
 AnalyzerScreen::AnalyzerScreen(NeotoPreAudioProcessor& p) : audioProcessor(p)
 {
     double initialFs = 44100.0;
-    virtualIn_Nickel.prepare(initialFs); virtualIn_Steel.prepare(initialFs); virtualIn_Iron.prepare(initialFs); virtualIn_Amorphous.prepare(initialFs);
-    virtualIn_Carnhill.prepare(initialFs); virtualIn_Cinemag.prepare(initialFs); // ★ 追加
+    virtualIn_Nickel.prepare(initialFs); virtualIn_Steel.prepare(initialFs); virtualIn_Iron.prepare(initialFs);
+    virtualIn_Amorphous.prepare(initialFs); virtualIn_Carnhill.prepare(initialFs); virtualIn_Cinemag.prepare(initialFs);
 
     virtualPreamp_API.prepare(initialFs); virtualPreamp_Neve.prepare(initialFs); virtualPreamp_Tube.prepare(initialFs);
     virtualPreamp_SSL.prepare(initialFs); virtualPreamp_Modern1.prepare(initialFs); virtualPreamp_Modern2.prepare(initialFs);
@@ -13,11 +13,11 @@ AnalyzerScreen::AnalyzerScreen(NeotoPreAudioProcessor& p) : audioProcessor(p)
     virtualPreamp_API.setAnalyzerMode(true); virtualPreamp_Neve.setAnalyzerMode(true); virtualPreamp_Tube.setAnalyzerMode(true);
     virtualPreamp_SSL.setAnalyzerMode(true); virtualPreamp_Modern1.setAnalyzerMode(true); virtualPreamp_Modern2.setAnalyzerMode(true);
 
-    virtualOut_Nickel.prepare(initialFs); virtualOut_Steel.prepare(initialFs); virtualOut_Iron.prepare(initialFs); virtualOut_Amorphous.prepare(initialFs);
-    virtualOut_Carnhill.prepare(initialFs); virtualOut_Cinemag.prepare(initialFs); // ★ 追加
+    virtualOut_Nickel.prepare(initialFs); virtualOut_Steel.prepare(initialFs); virtualOut_Iron.prepare(initialFs);
+    virtualOut_Amorphous.prepare(initialFs); virtualOut_Carnhill.prepare(initialFs); virtualOut_Cinemag.prepare(initialFs);
 
-    virtualOut_Nickel.setAnalyzerMode(true); virtualOut_Steel.setAnalyzerMode(true); virtualOut_Iron.setAnalyzerMode(true); virtualOut_Amorphous.setAnalyzerMode(true);
-    virtualOut_Carnhill.setAnalyzerMode(true); virtualOut_Cinemag.setAnalyzerMode(true); // ★ 追加
+    virtualOut_Nickel.setAnalyzerMode(true); virtualOut_Steel.setAnalyzerMode(true); virtualOut_Iron.setAnalyzerMode(true);
+    virtualOut_Amorphous.setAnalyzerMode(true); virtualOut_Carnhill.setAnalyzerMode(true); virtualOut_Cinemag.setAnalyzerMode(true);
 
     startTimerHz(30);
 }
@@ -116,31 +116,22 @@ void AnalyzerScreen::generateEQCurve()
     double currentFs = audioProcessor.getSampleRate();
     if (currentFs <= 0.0) currentFs = 44100.0;
 
-    virtualIn_Nickel.prepare(currentFs); virtualIn_Steel.prepare(currentFs); virtualIn_Iron.prepare(currentFs); virtualIn_Amorphous.prepare(currentFs);
-    virtualIn_Carnhill.prepare(currentFs); virtualIn_Cinemag.prepare(currentFs);
+    virtualIn_Nickel.prepare(currentFs); virtualIn_Steel.prepare(currentFs); virtualIn_Iron.prepare(currentFs);
+    virtualIn_Amorphous.prepare(currentFs); virtualIn_Carnhill.prepare(currentFs); virtualIn_Cinemag.prepare(currentFs);
 
-    virtualPreamp_API.prepare(currentFs); virtualPreamp_Neve.prepare(currentFs); virtualPreamp_Tube.prepare(currentFs); virtualPreamp_SSL.prepare(currentFs);
-    virtualPreamp_Modern1.prepare(currentFs); virtualPreamp_Modern2.prepare(currentFs);
+    virtualPreamp_API.prepare(currentFs); virtualPreamp_Neve.prepare(currentFs); virtualPreamp_Tube.prepare(currentFs);
+    virtualPreamp_SSL.prepare(currentFs); virtualPreamp_Modern1.prepare(currentFs); virtualPreamp_Modern2.prepare(currentFs);
 
-    virtualOut_Nickel.prepare(currentFs); virtualOut_Steel.prepare(currentFs); virtualOut_Iron.prepare(currentFs); virtualOut_Amorphous.prepare(currentFs);
-    virtualOut_Carnhill.prepare(currentFs); virtualOut_Cinemag.prepare(currentFs);
+    virtualOut_Nickel.prepare(currentFs); virtualOut_Steel.prepare(currentFs); virtualOut_Iron.prepare(currentFs);
+    virtualOut_Amorphous.prepare(currentFs); virtualOut_Carnhill.prepare(currentFs); virtualOut_Cinemag.prepare(currentFs);
 
+    // 必ず prepare 後に AnalyzerMode を true にセットして非線形飽和をバイパスする
+    virtualOut_Nickel.setAnalyzerMode(true); virtualOut_Steel.setAnalyzerMode(true); virtualOut_Iron.setAnalyzerMode(true);
+    virtualOut_Amorphous.setAnalyzerMode(true); virtualOut_Carnhill.setAnalyzerMode(true); virtualOut_Cinemag.setAnalyzerMode(true);
+
+    // フィルタのウォームアップ
     for (int i = 0; i < 8192; ++i) {
         float s = 0.0f;
-        if (inIdx == 1) s = virtualIn_Nickel.processSample(s);
-        else if (inIdx == 2) s = virtualIn_Steel.processSample(s);
-        else if (inIdx == 3) s = virtualIn_Iron.processSample(s);
-        else if (inIdx == 4) s = virtualIn_Amorphous.processSample(s);
-        else if (inIdx == 5) s = virtualIn_Carnhill.processSample(s);
-        else if (inIdx == 6) s = virtualIn_Cinemag.processSample(s);
-
-        if (preIdx == 0) s = virtualPreamp_API.processSample(s, drive, charac, asym, age);
-        else if (preIdx == 1) s = virtualPreamp_Neve.processSample(s, drive, charac, asym, age);
-        else if (preIdx == 2) s = virtualPreamp_Tube.processSample(s, drive, charac, asym, age);
-        else if (preIdx == 3) s = virtualPreamp_SSL.processSample(s, drive, charac, asym, age);
-        else if (preIdx == 4) s = virtualPreamp_Modern1.processSample(s, drive, charac, asym, age);
-        else if (preIdx == 5) s = virtualPreamp_Modern2.processSample(s, drive, charac, asym, age);
-
         if (outIdx == 1) s = virtualOut_Nickel.processSample(s, color, air, age);
         else if (outIdx == 2) s = virtualOut_Steel.processSample(s, color, air, age);
         else if (outIdx == 3) s = virtualOut_Iron.processSample(s, color, air, age);
@@ -151,10 +142,10 @@ void AnalyzerScreen::generateEQCurve()
 
     std::fill(eqFftData.begin(), eqFftData.end(), 0.0f);
 
-    // ★ 防御的プログラミング: 大信号による非線形サチュレーション・DCシフトを回避し、純粋な小信号周波数特性を取得する
     const float impulseLevel = 0.01f;
     eqFftData[0] = impulseLevel;
 
+    // インパルス応答の取得
     for (int i = 0; i < 8192; ++i) {
         float s = eqFftData[static_cast<size_t>(i)];
 
@@ -182,11 +173,17 @@ void AnalyzerScreen::generateEQCurve()
         eqFftData[static_cast<size_t>(i)] = s;
     }
 
+    // ★DCオフセット除去 (非対称クリッピング等に起因する低域の跳ね上がりを防止)
+    float dcOffset = eqFftData[8191];
+    for (int i = 0; i < 8192; ++i) {
+        eqFftData[i] -= dcOffset;
+    }
+
     fft.performRealOnlyForwardTransform(eqFftData.data());
 
     std::array<float, 4096> eqMag = { 0.0f };
     const float delaySamples = 2.0f;
-    const float restoreGain = 1.0f / impulseLevel; // ★ 下げたインパルスのゲインを復元
+    const float restoreGain = 1.0f / impulseLevel;
 
     for (int i = 1; i < 4096; ++i) {
         float re = eqFftData[static_cast<size_t>(i) * 2] * restoreGain;
@@ -249,8 +246,8 @@ void AnalyzerScreen::calculateHarmonics()
     else if (outIdx == 2) { oddLvl += 0.015f + colorCurve * 0.8f; evenLvl += 0.005f + colorCurve * 0.6f; }
     else if (outIdx == 3) { oddLvl += 0.015f + colorCurve * 1.3f; evenLvl += 0.005f + colorCurve * 0.3f; }
     else if (outIdx == 4) { oddLvl += (colorCurve * colorCurve) * 2.5f; }
-    else if (outIdx == 5) { evenLvl += 0.01f + colorCurve * 1.5f; oddLvl += 0.005f + colorCurve * 0.5f; } // Carnhill (Even dominant)
-    else if (outIdx == 6) { oddLvl += 0.005f + colorCurve * 1.0f; evenLvl += 0.01f + colorCurve * 1.2f; } // Cinemag (Smooth even)
+    else if (outIdx == 5) { evenLvl += 0.01f + colorCurve * 1.5f; oddLvl += 0.005f + colorCurve * 0.5f; }
+    else if (outIdx == 6) { oddLvl += 0.005f + colorCurve * 1.0f; evenLvl += 0.01f + colorCurve * 1.2f; }
 
     evenLvl = std::clamp(evenLvl, 0.0f, 1.5f);
     oddLvl = std::clamp(oddLvl, 0.0f, 1.5f);
