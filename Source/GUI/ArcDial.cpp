@@ -17,10 +17,27 @@ void ArcDialLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int w
     g.setColour(juce::Colour(0xff1a1a1a));
     g.drawEllipse(rx, ry, rw, rw, arcThickness);
 
-    // 2. 塗りつぶされるアーク（各セクションから渡されるダイナミックカラー）
+    // 2. 塗りつぶされるアーク（セクション色を基にしたグラデーション）
     juce::Path p;
     p.addArc(rx, ry, rw, rw, rotaryStartAngle, angle, true);
-    g.setColour(slider.findColour(juce::Slider::rotarySliderFillColourId));
+
+    // セクションから渡された色を取得
+    auto baseColour = slider.findColour(juce::Slider::rotarySliderFillColourId);
+
+    // その色を薄い色と濃い色にする
+    auto lightColour = baseColour.brighter(1.2f);  // 薄い色（明るくする）
+    auto darkColour = baseColour.darker(0.8f);     // 濃い色（暗くする）
+
+    // グラデーション作成（薄い→濃い）
+    juce::ColourGradient gradient(
+        darkColour,      // ← 左側：濃い色
+        rx, centreY,
+        lightColour,     // ← 右側：薄い色
+        rx + rw, centreY,
+        false
+    );
+
+    g.setGradientFill(gradient);
     g.strokePath(p, juce::PathStrokeType(arcThickness, juce::PathStrokeType::mitered, juce::PathStrokeType::butt));
 
     // 3. ポインター（直線のインジケーター）
