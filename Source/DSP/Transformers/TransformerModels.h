@@ -220,10 +220,20 @@ private:
     float lastColorParam = -1.0f, lastAirParam = -1.0f, lastAgeParam = -1.0f;
     double ja_a = 35.0, ja_k = 15.0, ja_c = 0.2;
     JAHysteresis hysteresisEngine;
-    double hpfState = 0.0, lastInput = 0.0, lpfState = 0.0, alphaHpf = 0.0, alphaLpf = 0.0;
-    double x1 = 0.0, x2 = 0.0, y1 = 0.0, y2 = 0.0, b0 = 1.0, b1 = 0.0, b2 = 0.0, a1 = 0.0, a2 = 0.0;
-    double hpfState_dry = 0.0, lastInput_dry = 0.0, lpfState_dry = 0.0;
-    double x1_dry = 0.0, x2_dry = 0.0, y1_dry = 0.0, y2_dry = 0.0;
+
+    // Age (HPF & LPF)
+    double hpfState = 0.0, lpfState = 0.0, lastInput = 0.0, alphaHpf = 0.0, alphaLpf = 0.0;
+    double hpfState_dry = 0.0, lpfState_dry = 0.0, lastInput_dry = 0.0;
+
+    // Color (High Shelf)
+    double col_x1 = 0.0, col_x2 = 0.0, col_y1 = 0.0, col_y2 = 0.0;
+    double col_x1_dry = 0.0, col_x2_dry = 0.0, col_y1_dry = 0.0, col_y2_dry = 0.0;
+    double col_b0 = 1.0, col_b1 = 0.0, col_b2 = 0.0, col_a1 = 0.0, col_a2 = 0.0;
+
+    // Air (Peak)
+    double air_x1 = 0.0, air_x2 = 0.0, air_y1 = 0.0, air_y2 = 0.0;
+    double air_x1_dry = 0.0, air_x2_dry = 0.0, air_y1_dry = 0.0, air_y2_dry = 0.0;
+    double air_b0 = 1.0, air_b1 = 0.0, air_b2 = 0.0, air_a1 = 0.0, air_a2 = 0.0;
 };
 
 class OutputTransformer_Cinemag : public IOutputTransformerEngine {
@@ -237,8 +247,23 @@ private:
     float lastColorParam = -1.0f, lastAirParam = -1.0f, lastAgeParam = -1.0f;
     double ja_a = 550.0, ja_k = 420.0, ja_c = 0.15;
     JAHysteresis hysteresisEngine;
-    double hpfState = 0.0, lastInput = 0.0, lpfState = 0.0, alphaHpf = 0.0, alphaLpf = 0.0;
-    double x1 = 0.0, x2 = 0.0, y1 = 0.0, y2 = 0.0, b0 = 1.0, b1 = 0.0, b2 = 0.0, a1 = 0.0, a2 = 0.0;
-    double hpfState_dry = 0.0, lastInput_dry = 0.0, lpfState_dry = 0.0;
-    double x1_dry = 0.0, x2_dry = 0.0, y1_dry = 0.0, y2_dry = 0.0;
+
+    // Age (HPF & LPF)
+    double hpfState = 0.0, lpfState = 0.0, lastInput = 0.0, alphaHpf = 0.0, alphaLpf = 0.0;
+    double hpfState_dry = 0.0, lpfState_dry = 0.0, lastInput_dry = 0.0;
+
+    // Color (Low Shelf)
+    double colL_x1 = 0.0, colL_x2 = 0.0, colL_y1 = 0.0, colL_y2 = 0.0;
+    double colL_x1_dry = 0.0, colL_x2_dry = 0.0, colL_y1_dry = 0.0, colL_y2_dry = 0.0;
+    double colL_b0 = 1.0, colL_b1 = 0.0, colL_b2 = 0.0, colL_a1 = 0.0, colL_a2 = 0.0;
+
+    // Color (High Shelf)
+    double colH_x1 = 0.0, colH_x2 = 0.0, colH_y1 = 0.0, colH_y2 = 0.0;
+    double colH_x1_dry = 0.0, colH_x2_dry = 0.0, colH_y1_dry = 0.0, colH_y2_dry = 0.0;
+    double colH_b0 = 1.0, colH_b1 = 0.0, colH_b2 = 0.0, colH_a1 = 0.0, colH_a2 = 0.0;
+
+    // Air (Peak)
+    double air_x1 = 0.0, air_x2 = 0.0, air_y1 = 0.0, air_y2 = 0.0;
+    double air_x1_dry = 0.0, air_x2_dry = 0.0, air_y1_dry = 0.0, air_y2_dry = 0.0;
+    double air_b0 = 1.0, air_b1 = 0.0, air_b2 = 0.0, air_a1 = 0.0, air_a2 = 0.0;
 };
