@@ -1,4 +1,5 @@
 #include "InputSection.h"
+#include "BinaryData.h"
 
 InputSection::InputSection(NeotoPreAudioProcessor& p) : audioProcessor(p)
 {

@@ -60,6 +60,20 @@ Independent selection of Input and Output transformers, utilizing **Jiles-Athert
    `C:\Program Files\Common Files\VST3`
 3. Rescan your plugins in Ableton Live 11.
 
+## 📚 User Guide
+
+A comprehensive manual covering detailed technical specifications and operational guidelines is included with this repository.
+
+[ ![Manual PDF](https://img.shields.io/badge/Manual-PDF-red?style=for-the-badge&logo=adobe-acrobat-reader) ](./Source/Assets/NEOTO_Pre_Manual_JP.pdf)
+[ ![Manual PDF](https://img.shields.io/badge/Manual-PDF-red?style=for-the-badge&logo=adobe-acrobat-reader) ](./Source/Assets/NEOTO_Pre_User_Manual_Eng.pdf)
+
+**Key Contents of the Manual:**
+- **Detailed Section Breakdowns:** Complete explanation of all parameters across the Input, Drive, and Output stages.
+- **Transformer Guide:** Acoustic characteristics and comparisons of Nickel, Steel, Iron, Amorphous, Carnhill, and Cinemag models.
+- **DSP Specifications:** Insights into ADAA, hysteresis physical modeling, and frequency response variations based on Oversampling (OS) settings.
+- **Auto Gain Matching:** Step-by-step procedures for utilizing the ITU-R BS.1770 based perceived loudness matching system.
+- **Gain Staging:** Understanding the internal reference level (-18dBFS / 0VU) for optimal analog saturation.
+
 ## Disclaimer & Stability
 This software is provided "as-is", without any warranty of any kind. 
 The DSP core has been strictly engineered to prevent `NaN` generation, zero-division, and memory leaks. The architecture isolates the audio thread from UI operations to maintain host stability under heavy loads.
