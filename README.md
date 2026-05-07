@@ -64,8 +64,8 @@ Independent selection of Input and Output transformers, utilizing **Jiles-Athert
 
 A comprehensive manual covering detailed technical specifications and operational guidelines is included with this repository.
 
-[ ![Manual PDF](https://img.shields.io/badge/Manual-PDF-red?style=for-the-badge&logo=adobe-acrobat-reader) ](./Source/Assets/NEOTO_Pre_Manual_JP.pdf)
-[ ![Manual PDF](https://img.shields.io/badge/Manual-PDF-red?style=for-the-badge&logo=adobe-acrobat-reader) ](./Source/Assets/NEOTO_Pre_User_Manual_Eng.pdf)
+[ ![Manual PDF（JP）](https://img.shields.io/badge/Manual-PDF-red?style=for-the-badge&logo=adobe-acrobat-reader) ](./Source/Assets/NEOTO_Pre_Manual_JP.pdf)
+[ ![Manual PDF（EN）](https://img.shields.io/badge/Manual-PDF-red?style=for-the-badge&logo=adobe-acrobat-reader) ](./Source/Assets/NEOTO_Pre_User_Manual_Eng.pdf)
 
 **Key Contents of the Manual:**
 - **Detailed Section Breakdowns:** Complete explanation of all parameters across the Input, Drive, and Output stages.
