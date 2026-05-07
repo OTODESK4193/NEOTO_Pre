@@ -31,11 +31,9 @@ void VerticalMeter::timerCallback()
 void VerticalMeter::resized()
 {
     auto bounds = getLocalBounds().toFloat().withTrimmedTop(25.0f);
-    // パステル調のグラデーション (Soft Pink -> Pastel Blue)
-    gradient = juce::ColourGradient(juce::Colour(0xffff88a3), bounds.getTopLeft(), juce::Colour(0xff88aaff), bounds.getBottomLeft(), false);
-    gradient.addColour(0.3, juce::Colour(0xff88eeff)); // Soft Cyan
-    gradient.addColour(0.6, juce::Colour(0xff88ffaa)); // Mint Green
-    gradient.addColour(0.85, juce::Colour(0xffffee88)); // Soft Yellow
+    // 下部：濃い緑 → 上部：赤のグラデーション
+    gradient = juce::ColourGradient(juce::Colour(0xffff8888), bounds.getTopLeft(), juce::Colour(0xff009900), bounds.getBottomLeft(), false);
+    gradient.addColour(0.5, juce::Colour(0xffffdd88)); // 中間：パステル黄色
 }
 
 void VerticalMeter::paint(juce::Graphics& g)
@@ -51,8 +49,8 @@ void VerticalMeter::paint(juce::Graphics& g)
 
     bounds.removeFromTop(5.0f); // 隙間
 
-    // メーター背景
-    g.setColour(juce::Colour(0xff111111));
+    // メーター背景全体をグラデーション色で塗る
+    g.setGradientFill(gradient);
     g.fillRoundedRectangle(bounds, 4.0f);
 
     auto dbToY = [&bounds](float db) {
@@ -61,9 +59,11 @@ void VerticalMeter::paint(juce::Graphics& g)
         };
 
     float yPos = dbToY(currentLevelDb);
-    juce::Rectangle<float> meterFill(bounds.getX(), yPos, bounds.getWidth(), bounds.getHeight() - yPos);
-    g.setGradientFill(gradient);
-    g.fillRoundedRectangle(meterFill, 4.0f);
+
+    // 現在のレベルより上部を黒くマスク
+    juce::Rectangle<float> maskRect(bounds.getX(), bounds.getY(), bounds.getWidth(), yPos);
+    g.setColour(juce::Colour(0xff111111));
+    g.fillRoundedRectangle(maskRect, 4.0f);
 
     if (peakHoldDb > -59.0f) {
         float peakY = dbToY(peakHoldDb);
