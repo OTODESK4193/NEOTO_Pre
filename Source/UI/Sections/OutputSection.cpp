@@ -7,8 +7,8 @@ OutputSection::OutputSection(NeotoPreAudioProcessor& p) : audioProcessor(p)
 
     outGainSlider.setLookAndFeel(&arcLnF);
     mixSlider.setLookAndFeel(&arcLnF);
-    outGainSlider.setColour(juce::Slider::rotarySliderFillColourId, juce::Colours::white);
-    mixSlider.setColour(juce::Slider::rotarySliderFillColourId, juce::Colours::white);
+    outGainSlider.setColour(juce::Slider::rotarySliderFillColourId, juce::Colour(0xffff0000));  // 赤
+    mixSlider.setColour(juce::Slider::rotarySliderFillColourId, juce::Colour(0xff0099ff));     // 青
 
     listenButton.setClickingTogglesState(true);
     listenButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff222222));

@@ -26,13 +26,12 @@ DriveSection::DriveSection(NeotoPreAudioProcessor& p) : audioProcessor(p)
         int id = preampModelCombo.getSelectedItemIndex();
         juce::Colour c = juce::Colours::cyan;
 
-        // 1. カラーの更新
-        if (id == 0)      c = juce::Colour(0xff00d4ff); // API: Blue
-        else if (id == 1) c = juce::Colour(0xffff5555); // Neve: Red
-        else if (id == 2) c = juce::Colour(0xffffaa00); // Tube: Orange
-        else if (id == 3) c = juce::Colour(0xff00ff88); // SSL: Green
-        else if (id == 4) c = juce::Colours::white;     // Modern1 (TG2): White
-        else if (id == 5) c = juce::Colour(0xffcc55ff); // Modern2 (B173): Purple
+        if (id == 0)      c = juce::Colour(0xff0066ff);      // API: RGB Blue
+        else if (id == 1) c = juce::Colour(0xffff0000);      // Neve: RGB Red
+        else if (id == 2) c = juce::Colour(0xffffcc00);      // Tube: RGB Gold
+        else if (id == 3) c = juce::Colour(0xff00cc00);      // SSL: RGB Green
+        else if (id == 4) c = juce::Colour(0xffE0C060);
+        else if (id == 5) c = juce::Colour(0xffee00ff);      // Modern2: RGB Magenta
 
         driveSlider.setColour(juce::Slider::rotarySliderFillColourId, c);
         charSlider.setColour(juce::Slider::rotarySliderFillColourId, c);

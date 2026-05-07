@@ -26,13 +26,13 @@ TransformerSection::TransformerSection(NeotoPreAudioProcessor& p) : audioProcess
     auto updateColors = [this] {
         int id = outTransCombo.getSelectedItemIndex();
         juce::Colour c = juce::Colours::cyan;
-        if (id == 0)      c = juce::Colour(0xff888888); // None
-        else if (id == 1) c = juce::Colour(0xff00d4ff); // Nickel
-        else if (id == 2) c = juce::Colour(0xffff5555); // Steel
-        else if (id == 3) c = juce::Colour(0xffffaa00); // Iron
-        else if (id == 4) c = juce::Colour(0xffcc55ff); // Amorphous
-        else if (id == 5) c = juce::Colours::white;     // Carnhill
-        else if (id == 6) c = juce::Colour(0xff88ccff); // Cinemag
+        if (id == 0)      c = juce::Colour(0xff444444);      // None → チャコール
+        else if (id == 1) c = juce::Colour(0xff0088aa);      // Nickel → ティール
+        else if (id == 2) c = juce::Colour(0xffaa2222);      // Steel → 濃赤
+        else if (id == 3) c = juce::Colour(0xffcc5500);      // Iron → 濃オレンジ
+        else if (id == 4) c = juce::Colour(0xff7722cc);      // Amorphous → 深紫
+        else if (id == 5) c = juce::Colour(0xffbbbbbb);      // Carnhill → シルバー
+        else if (id == 6) c = juce::Colour(0xff0055dd);      // Cinemag → 濃青
 
         colorSlider.setColour(juce::Slider::rotarySliderFillColourId, c);
         airSlider.setColour(juce::Slider::rotarySliderFillColourId, c);

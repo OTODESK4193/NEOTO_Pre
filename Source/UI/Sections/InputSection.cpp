@@ -60,17 +60,17 @@ InputSection::InputSection(NeotoPreAudioProcessor& p) : audioProcessor(p)
     auto updateColors = [this] {
         int id = inTransCombo.getSelectedItemIndex();
         juce::Colour c = juce::Colours::cyan;
-        if (id == 0)      c = juce::Colour(0xff888888);
-        else if (id == 1) c = juce::Colour(0xff00d4ff);
-        else if (id == 2) c = juce::Colour(0xffff5555);
-        else if (id == 3) c = juce::Colour(0xffffaa00);
-        else if (id == 4) c = juce::Colour(0xffcc55ff);
-        else if (id == 5) c = juce::Colours::white;
-        else if (id == 6) c = juce::Colour(0xff88ccff);
-
+        if (id == 0)      c = juce::Colour(0xff444444);      // None → チャコール
+        else if (id == 1) c = juce::Colour(0xff0088aa);      // Nickel → ティール
+        else if (id == 2) c = juce::Colour(0xffaa2222);      // Steel → 濃赤
+        else if (id == 3) c = juce::Colour(0xffcc5500);      // Iron → 濃オレンジ
+        else if (id == 4) c = juce::Colour(0xff7722cc);      // Amorphous → 深紫
+        else if (id == 5) c = juce::Colour(0xffbbbbbb);      // Carnhill → シルバー
+        else if (id == 6) c = juce::Colour(0xff0055dd);      // Cinemag → 濃青
         inputGainSlider.setColour(juce::Slider::rotarySliderFillColourId, c);
         repaint();
         };
+
     inTransCombo.onChange = updateColors;
     updateColors();
 }

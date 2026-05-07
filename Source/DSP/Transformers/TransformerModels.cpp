@@ -69,7 +69,10 @@ float InputTransformer_Steel::processDrySample(float input) {
 
 void InputTransformer_Iron::prepare(double sampleRate) { fs = sampleRate; lastInputADAA = 0.0; lastInputADAA_dry = 0.0; }
 float InputTransformer_Iron::processSample(float input) {
-    double dIn = static_cast<double>(input); double dx = dIn - lastInputADAA; double out = 0.0;
+    double dIn = static_cast<double>(input);
+    if (std::abs(dIn) < 1e-6) dIn = 0.0;
+
+    double dx = dIn - lastInputADAA; double out = 0.0;
     if (std::abs(dx) < 1e-8) out = ADAA_Math::fx_iron((dIn + lastInputADAA) * 0.5);
     else out = (ADAA_Math::F1_iron(dIn) - ADAA_Math::F1_iron(lastInputADAA)) / dx;
     lastInputADAA = dIn; return static_cast<float>(out);
@@ -81,7 +84,10 @@ float InputTransformer_Iron::processDrySample(float input) {
 
 void InputTransformer_Amorphous::prepare(double sampleRate) { fs = sampleRate; lastInputADAA = 0.0; lastInputADAA_dry = 0.0; }
 float InputTransformer_Amorphous::processSample(float input) {
-    double dIn = static_cast<double>(input); double dx = dIn - lastInputADAA; double out = 0.0;
+    double dIn = static_cast<double>(input);
+    if (std::abs(dIn) < 1e-6) dIn = 0.0;
+
+    double dx = dIn - lastInputADAA; double out = 0.0;
     auto fx_a = [](double x) { return std::clamp(x, -4.0, 4.0); };
     auto F1_a = [](double x) { if (x > 4.0) return 4.0 * x - 8.0; if (x < -4.0) return -4.0 * x - 8.0; return 0.5 * x * x; };
     if (std::abs(dx) < 1e-8) out = fx_a((dIn + lastInputADAA) * 0.5);
@@ -95,7 +101,10 @@ float InputTransformer_Amorphous::processDrySample(float input) {
 
 void InputTransformer_Carnhill::prepare(double sampleRate) { fs = sampleRate; lastInputADAA = 0.0; lastInputADAA_dry = 0.0; }
 float InputTransformer_Carnhill::processSample(float input) {
-    double dIn = static_cast<double>(input); double dx = dIn - lastInputADAA; double out = 0.0;
+    double dIn = static_cast<double>(input);
+    if (std::abs(dIn) < 1e-6) dIn = 0.0;
+
+    double dx = dIn - lastInputADAA; double out = 0.0;
     if (std::abs(dx) < 1e-8) out = ADAA_Math::fx_iron((dIn + lastInputADAA) * 0.5);
     else out = (ADAA_Math::F1_iron(dIn) - ADAA_Math::F1_iron(lastInputADAA)) / dx;
     lastInputADAA = dIn; return static_cast<float>(out);
@@ -107,7 +116,10 @@ float InputTransformer_Carnhill::processDrySample(float input) {
 
 void InputTransformer_Cinemag::prepare(double sampleRate) { fs = sampleRate; lastInputADAA = 0.0; lastInputADAA_dry = 0.0; }
 float InputTransformer_Cinemag::processSample(float input) {
-    double dIn = static_cast<double>(input); double dx = dIn - lastInputADAA; double out = 0.0;
+    double dIn = static_cast<double>(input);
+    if (std::abs(dIn) < 1e-6) dIn = 0.0;
+
+    double dx = dIn - lastInputADAA; double out = 0.0;
     if (std::abs(dx) < 1e-8) out = ADAA_Math::fx_hardclip((dIn + lastInputADAA) * 0.5);
     else out = (ADAA_Math::F1_hardclip(dIn) - ADAA_Math::F1_hardclip(lastInputADAA)) / dx;
     lastInputADAA = dIn; return static_cast<float>(out);
