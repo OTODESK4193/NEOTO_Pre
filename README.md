@@ -1,7 +1,7 @@
 # NEOTO_Pre
 
 ![Release](https://img.shields.io/badge/release-v1.0-blue)
-![License](https://img.shields.io/badge/license-GPLv3-green)
+![License](https://img.shields.io/badge/license-AGPLv3-green)
 ![JUCE](https://img.shields.io/badge/JUCE-8.0.8-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20-lightgrey)
 ![Downloads](https://img.shields.io/github/downloads/OTODESK4193/OtodeskSampler/total.svg)
@@ -80,7 +80,9 @@ This software is provided "as-is", without any warranty of any kind.
 The DSP core has been strictly engineered to prevent `NaN` generation, zero-division, and memory leaks. The architecture isolates the audio thread from UI operations to maintain host stability under heavy loads.
 
 ## License
-This project is completely free and open-source. It is distributed under the **GPLv3 License** (due to JUCE framework standard open-source licensing). You are free to study, modify, and distribute the source code under the same terms.
+
+This project is licensed under the GNU Affero General Public License v3.0 (AGPLv3) - see the [LICENSE](LICENSE) file for details.
+This software is built using the **JUCE 8** framework. In accordance with JUCE 8's open-source licensing terms, this entire project is distributed under the AGPLv3.
 
 ## 🎓 Credits
 
