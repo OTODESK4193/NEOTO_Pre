@@ -4,7 +4,7 @@
 ![License](https://img.shields.io/badge/license-AGPLv3-green)
 ![JUCE](https://img.shields.io/badge/JUCE-8.0.8-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20-lightgrey)
-![Downloads](https://img.shields.io/github/downloads/OTODESK4193/OtodeskSampler/total.svg)
+![Downloads](https://img.shields.io/github/downloads/OTODESK4193/NEOTO_Pre/total.svg)
 
 ##
 <img src="Source/Assets/Screenshot.jpg" width="600">
@@ -55,7 +55,7 @@ Independent selection of Input and Output transformers, utilizing **Jiles-Athert
 *(Note: This plugin is developed and compiled exclusively for Windows architectures.)*
 
 ## Installation
-1. Download the latest `NEOTO_Pre.vst3` file from the [Releases](#) page.
+1. Download the latest `NEOTO_Pre.vst3` file from the [Releases](https://github.com/OTODESK4193/NEOTO_Pre/releases/latest) page.
 2. Move the `.vst3` file to your default VST3 plugin directory:
    `C:\Program Files\Common Files\VST3`
 3. Rescan your plugins in Ableton Live 11.
