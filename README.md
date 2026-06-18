@@ -9,10 +9,40 @@
 ##
 <img src="Source/Assets/Screenshot.jpg" width="600">
 
-## Ver1.1.0 2024-6-18
-**1.Analyze → 「SweetSpot...」→「AutoLevel...」 の2段階フロー（計2N秒）に変更
-**2.Apply = 現在のOutputGain + Suggest の差分加算に修正（再分析時のバグ修正）
-**3.Listen = 完全ドライ（InputGainのみ、DSP処理なし）に変更
+---
+
+## 📋 Changelog
+
+### v1.10 (2026-06-18)
+
+#### 🔧 Auto Level — Full Overhaul
+
+* **Changed to Real-Time Measurement System**
+* Revamped the system to measure real-time audio for a set duration after pressing the **Analyze** button.
+* *Legacy:* Analyzed past audio data retrospectively.
+
+
+* **Two-Phase Automated Analysis Flow**
+* **Phase 1 "SweetSpot":** Measures the original input level and automatically adjusts **InputGain** to around **-18dBFS**.
+* **Phase 2 "AutoLevel":** Compares the adjusted Dry/Wet volumes to calculate the **Suggest** value.
+
+
+* **Fixed Apply Addition Logic**
+* During re-analysis, the **Suggest** value is now applied as a **differential addition** to the current **OutputGain**.
+* *Legacy:* Overwrote the value with an absolute number.
+
+
+* **Phase Progress Display**
+* Displays real-time progress during analysis, changing from "SweetSpot..." to "AutoLevel...".
+
+
+
+#### 🎧 Listen Mode Improvements
+
+* **Pure Dry Output**
+* When the **Listen** button is turned ON, it now outputs the **pure original sound** passed only through **InputGain**.
+* *Legacy:* Outputted the signal passed through the DSP dry path.
+
 
 ## Overview
 **NEOTO_Pre** is an open-source, highly detailed analog-modeled preamplifier and transformer saturation VST3 plugin. Engineered with rigorous digital signal processing (DSP) principles, it provides authentic vintage warmth, harmonic richness, and dynamic spatial depth to your digital audio workstation.
@@ -80,27 +110,9 @@ A comprehensive manual covering detailed technical specifications and operationa
 - **Auto Gain Matching:** Step-by-step procedures for utilizing the ITU-R BS.1770 based perceived loudness matching system.
 - **Gain Staging:** Understanding the internal reference level (-18dBFS / 0VU) for optimal analog saturation.
 
-## 📋 Changelog
-
-### v1.10 (2025-06-18)
-
-#### 🔧 Auto Level — 全面リニューアル
-- **未来測定方式に変更**: Analyzeボタン押下後、設定秒数の音声をリアルタイムで測定する方式に刷新（旧: 過去データの遡り分析）
-- **2段階自動解析フロー**:
-  - **Phase 1「SweetSpot」**: 原音レベルを測定 → InputGainを **-18dBFS** 付近に自動調整
-  - **Phase 2「AutoLevel」**: 調整後のDry/Wet音量を比較 → Suggest値を算出
-- **Apply加算ロジック修正**: 再分析時、Suggestを現在のOutputGainに **差分加算** して適用（旧: 絶対値で上書き）
-- **フェーズ表示**: 分析中は「SweetSpot...」→「AutoLevel...」と進捗をリアルタイム表示
-
-#### 🎧 Listen モード改善
-- **完全ドライ出力**: ListenボタンON時、InputGainのみを通った **純粋な原音** を出力（旧: DSP dry pathを通過した信号）
-
-#### 🏷️ バージョン表示
-- DAWプラグイン名・ウィンドウタイトルに **NEOTO_Pre1.10** を表示
-
----
 
 ### v1.0
+
 - 初回リリース
 
 ## Disclaimer & Stability
