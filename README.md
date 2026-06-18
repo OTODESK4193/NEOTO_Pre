@@ -9,6 +9,11 @@
 ##
 <img src="Source/Assets/Screenshot.jpg" width="600">
 
+## Ver1.1.0 2024-6-18
+1.Analyze → 「SweetSpot...」→「AutoLevel...」 の2段階フロー（計2N秒）に変更
+2.Apply = 現在のOutputGain + Suggest の差分加算に修正（再分析時のバグ修正）
+3.Listen = 完全ドライ（InputGainのみ、DSP処理なし）に変更
+
 ## Overview
 **NEOTO_Pre** is an open-source, highly detailed analog-modeled preamplifier and transformer saturation VST3 plugin. Engineered with rigorous digital signal processing (DSP) principles, it provides authentic vintage warmth, harmonic richness, and dynamic spatial depth to your digital audio workstation.
 

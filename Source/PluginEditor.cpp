@@ -65,12 +65,6 @@ void NeotoPreAudioProcessorEditor::paint(juce::Graphics& g)
         g.setColour(juce::Colour(0, 0, 0).withAlpha(0.08f));
         g.drawVerticalLine(x + (int)verticalNoise, 0, getHeight());
     }
-
-    // ★ バージョン表示（V1.1.0）
-    g.setColour(juce::Colour(0xaadddddd));
-    g.setFont(juce::FontOptions(12.0f));
-    g.drawText("NEOTO_Pre " NEOTO_PRE_VERSION, getLocalBounds().reduced(55, 2).removeFromTop(14),
-        juce::Justification::centredLeft, false);
 }
 
 void NeotoPreAudioProcessorEditor::resized()

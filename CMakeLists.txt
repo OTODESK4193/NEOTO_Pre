@@ -33,7 +33,7 @@ juce_add_plugin(NEOTO_Pre
     PLUGIN_MANUFACTURER_CODE "Otdk"
     PLUGIN_CODE "NeoP"                              
     FORMATS VST3 Standalone
-    PRODUCT_NAME "NEOTO_Pre"
+    PRODUCT_NAME "NEOTO_Pre1.10"
     CHANNEL_CONFIGS 2,2                             
 )
 
