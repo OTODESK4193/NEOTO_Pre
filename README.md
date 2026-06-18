@@ -1,6 +1,6 @@
 # NEOTO_Pre
 
-![Release](https://img.shields.io/badge/release-v1.0-blue)
+![Release](https://img.shields.io/badge/release-v1.10-blue)
 ![License](https://img.shields.io/badge/license-AGPLv3-green)
 ![JUCE](https://img.shields.io/badge/JUCE-8.0.8-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20-lightgrey)
@@ -79,6 +79,29 @@ A comprehensive manual covering detailed technical specifications and operationa
 - **DSP Specifications:** Insights into ADAA, hysteresis physical modeling, and frequency response variations based on Oversampling (OS) settings.
 - **Auto Gain Matching:** Step-by-step procedures for utilizing the ITU-R BS.1770 based perceived loudness matching system.
 - **Gain Staging:** Understanding the internal reference level (-18dBFS / 0VU) for optimal analog saturation.
+
+## 📋 Changelog
+
+### v1.10 (2025-06-18)
+
+#### 🔧 Auto Level — 全面リニューアル
+- **未来測定方式に変更**: Analyzeボタン押下後、設定秒数の音声をリアルタイムで測定する方式に刷新（旧: 過去データの遡り分析）
+- **2段階自動解析フロー**:
+  - **Phase 1「SweetSpot」**: 原音レベルを測定 → InputGainを **-18dBFS** 付近に自動調整
+  - **Phase 2「AutoLevel」**: 調整後のDry/Wet音量を比較 → Suggest値を算出
+- **Apply加算ロジック修正**: 再分析時、Suggestを現在のOutputGainに **差分加算** して適用（旧: 絶対値で上書き）
+- **フェーズ表示**: 分析中は「SweetSpot...」→「AutoLevel...」と進捗をリアルタイム表示
+
+#### 🎧 Listen モード改善
+- **完全ドライ出力**: ListenボタンON時、InputGainのみを通った **純粋な原音** を出力（旧: DSP dry pathを通過した信号）
+
+#### 🏷️ バージョン表示
+- DAWプラグイン名・ウィンドウタイトルに **NEOTO_Pre1.10** を表示
+
+---
+
+### v1.0
+- 初回リリース
 
 ## Disclaimer & Stability
 This software is provided "as-is", without any warranty of any kind. 
