@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.22)
-project(NEOTO_Pre VERSION 1.0.0 LANGUAGES C CXX)
+project(NEOTO_Pre VERSION 1.1.0 LANGUAGES C CXX)
+
+# バージョン文字列をソースコードから参照可能にする
+add_compile_definitions(NEOTO_PRE_VERSION="${PROJECT_VERSION}")
 
 # VST3の互換エラー回避と安全対策
 set(JUCE_VST3_AUTO_MANIFEST OFF)

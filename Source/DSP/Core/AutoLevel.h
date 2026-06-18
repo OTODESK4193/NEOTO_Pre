@@ -1,6 +1,5 @@
 #pragma once
 #include <JuceHeader.h>
-#include <vector>
 #include <atomic>
 
 class AutoLevel
@@ -11,27 +10,47 @@ public:
 
     void prepare(double sampleRate);
 
-    // ヒストリーバッファへの記録 (内部でK-Weightingと二乗処理を完了させる)
+    // ==============================================================================
+    // 録音制御（Message Thread から呼ばれる）
+    // ==============================================================================
+    void startRecording(int totalSamples);
+
+    // 録音中かどうか（Audio Thread / Message Thread 両方から読み取り可能）
+    bool isRecording() const { return recording.load(std::memory_order_relaxed); }
+
+    // 録音完了フラグ（Message Thread が読み取り → exchange で消費）
+    bool isComplete() const { return recordingComplete.load(std::memory_order_relaxed); }
+    void clearComplete() { recordingComplete.store(false); }
+
+    // ==============================================================================
+    // サンプル記録（Audio Thread から毎サンプル呼ばれる）
+    // ==============================================================================
     void pushDrySample(float input);
     void pushWetSample(float input);
 
-    // 指定秒数遡ってK-Weighted RMS(Mean Square)を計算
-    void analyzeRMS(float seconds);
-
-    // GUI/Processor表示用: 最新の解析結果を取得 (平方根を取る前の「純粋なエネルギー値」)
-    float getLatestDryRMS() const { return latestDryRms.load(); }
-    float getLatestWetRMS() const { return latestWetRms.load(); }
+    // ==============================================================================
+    // 解析結果取得（録音完了後、Message Thread から読み取り）
+    // ==============================================================================
+    float getDryMeanSquare() const { return dryMeanSquare.load(); }
+    float getWetMeanSquare() const { return wetMeanSquare.load(); }
 
 private:
     double fs = 44100.0;
 
-    std::vector<float> dryHistoryBuffer;
-    std::vector<float> wetHistoryBuffer;
-    int dryWriteIndex = 0;
-    int wetWriteIndex = 0;
+    // 録音状態管理
+    std::atomic<bool> recording{ false };
+    std::atomic<bool> recordingComplete{ false };
+    std::atomic<int> samplesToRecord{ 0 };
+    int samplesRecorded = 0;
 
-    std::atomic<float> latestDryRms{ 0.0f };
-    std::atomic<float> latestWetRms{ 0.0f };
+    // リアルタイム累積バッファ（Audio Thread のみ書き込み）
+    double drySquareSum = 0.0;
+    double wetSquareSum = 0.0;
+    int wetSamplesRecorded = 0;
+
+    // 解析結果（Audio Thread が書き込み、Message Thread が読み取り）
+    std::atomic<float> dryMeanSquare{ 0.0f };
+    std::atomic<float> wetMeanSquare{ 0.0f };
 
     // ITU-R BS.1770 K-Weighting Filters
     juce::dsp::IIR::Filter<float> preFilterDry;

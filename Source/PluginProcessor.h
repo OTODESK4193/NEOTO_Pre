@@ -51,14 +51,23 @@ public:
     juce::AudioProcessorValueTreeState apvts;
 
     // ==============================================================================
-    // GUIとDSPスレッドを切り離すための解析システム
+    // 解析ステートマシン（SweetSpot → AutoLevel → Done）
     // ==============================================================================
-    std::atomic<bool> triggerAnalyze{ false };
+    void startAnalysis(float seconds);
+    void updateAnalysisState();
+    int getAnalysisPhase() const { return analysisPhaseState.load(); }
+
+    // 解析フェーズ: 0=Idle, 1=SweetSpot, 2=AutoLevel, 3=Done
+    std::atomic<int> analysisPhaseState{ 0 };
+
+    // SweetSpot結果（Message Thread が読み取り）
+    float sweetSpotMeasuredDb = -100.0f;
+    float sweetSpotInputGainDb = 0.0f;
+    std::atomic<bool> hasSweetSpotResult{ false };
+
+    // AutoLevel結果
     AutoLevelAnalysisResult latestAnalysisResult;
     std::atomic<bool> hasNewAnalysisResult{ false };
-
-    // RMS解析をAudioThread外で実行するためのパブリックメソッド
-    void executeAnalyzer(float seconds);
 
     std::atomic<float> inputPeakDb{ -60.0f };
     std::atomic<float> outputPeakDb{ -60.0f };
@@ -73,6 +82,8 @@ private:
     int currentOsMode = -1;
     double currentSampleRate = 44100.0;
     std::array<AutoLevel, 2> autoLevels;
+    juce::AudioBuffer<float> listenDryBuffer;
+    float analysisSeconds = 3.0f;
 
     float inPeakState = 0.0f;
     float outPeakState = 0.0f;

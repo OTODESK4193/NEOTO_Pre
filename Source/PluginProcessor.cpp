@@ -126,6 +126,9 @@ void NeotoPreAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBloc
     for (auto& al : autoLevels) al.prepare(sampleRate);
     for (auto& os : oversamplers) os->initProcessing(samplesPerBlock);
 
+    // Listenモード用: InputGain適用後の純粋なドライ信号を保持
+    listenDryBuffer.setSize(2, samplesPerBlock, false, true);
+
     for (int i = 0; i < 2; ++i) {
         inputGainSmoother[i].reset(sampleRate, 0.02);
         outputGainSmoother[i].reset(sampleRate, 0.15);
@@ -164,40 +167,101 @@ void NeotoPreAudioProcessor::releaseResources()
     for (auto& os : oversamplers) os->reset();
 }
 
-void NeotoPreAudioProcessor::executeAnalyzer(float seconds)
+// ==============================================================================
+// 解析ステートマシン: 開始
+// ==============================================================================
+void NeotoPreAudioProcessor::startAnalysis(float seconds)
 {
-    for (int ch = 0; ch < getTotalNumInputChannels(); ++ch) {
-        autoLevels[ch].analyzeRMS(seconds);
+    // 進行中の解析をキャンセル
+    analysisPhaseState.store(0);
+
+    analysisSeconds = seconds;
+    int numSamples = static_cast<int>(currentSampleRate * seconds);
+
+    for (int ch = 0; ch < 2; ++ch) {
+        autoLevels[ch].startRecording(numSamples);
     }
 
-    float dryEnergyL = autoLevels[0].getLatestDryRMS();
-    float wetEnergyL = autoLevels[0].getLatestWetRMS();
-    float dryEnergyR = getTotalNumInputChannels() > 1 ? autoLevels[1].getLatestDryRMS() : dryEnergyL;
-    float wetEnergyR = getTotalNumInputChannels() > 1 ? autoLevels[1].getLatestWetRMS() : wetEnergyL;
+    hasSweetSpotResult.store(false);
+    hasNewAnalysisResult.store(false);
 
-    float totalDryEnergy = dryEnergyL + dryEnergyR;
-    float totalWetEnergy = wetEnergyL + wetEnergyR;
+    // SweetSpotフェーズ開始
+    analysisPhaseState.store(1);
+}
 
-    const float lufsOffset = -0.691f;
-    float dryLufs = -100.0f;
-    float wetLufs = -100.0f;
+// ==============================================================================
+// 解析ステートマシン: フェーズ遷移確認（Message Threadから呼ばれる）
+// ==============================================================================
+void NeotoPreAudioProcessor::updateAnalysisState()
+{
+    int phase = analysisPhaseState.load();
 
-    if (totalDryEnergy > 1e-10f) dryLufs = 10.0f * std::log10(totalDryEnergy) + lufsOffset;
-    if (totalWetEnergy > 1e-10f) wetLufs = 10.0f * std::log10(totalWetEnergy) + lufsOffset;
+    // ---- Phase 1: SweetSpot 完了判定 ----
+    if (phase == 1 && autoLevels[0].isComplete())
+    {
+        // K-Weighted 入力レベルを計算
+        float dryEnergyL = autoLevels[0].getDryMeanSquare();
+        float dryEnergyR = getTotalNumInputChannels() > 1 ? autoLevels[1].getDryMeanSquare() : dryEnergyL;
+        float totalDryEnergy = dryEnergyL + dryEnergyR;
 
-    latestAnalysisResult.dryRmsL = dryLufs;
-    latestAnalysisResult.wetRmsL = wetLufs;
-    latestAnalysisResult.dryRmsR = 0.0f;
-    latestAnalysisResult.wetRmsR = 0.0f;
+        float measuredDb = -100.0f;
+        if (totalDryEnergy > 1e-10f)
+            measuredDb = 10.0f * std::log10(totalDryEnergy) - 0.691f;
 
-    if (totalWetEnergy > 1e-10f && totalDryEnergy > 1e-10f) {
-        latestAnalysisResult.suggestedGainDb = dryLufs - wetLufs;
+        // InputGainを -18 dBFS SweetSpotに調整
+        float targetDb = -18.0f;
+        float suggestedInputGain = targetDb - measuredDb;
+        suggestedInputGain = std::clamp(suggestedInputGain, -24.0f, 24.0f);
+
+        // SweetSpot結果を保存
+        sweetSpotMeasuredDb = measuredDb;
+        sweetSpotInputGainDb = suggestedInputGain;
+        hasSweetSpotResult.store(true);
+
+        // InputGainパラメータを適用
+        auto* param = apvts.getParameter("input_gain");
+        param->setValueNotifyingHost(param->convertTo0to1(suggestedInputGain));
+
+        // AutoLevelフェーズを開始
+        int numSamples = static_cast<int>(currentSampleRate * analysisSeconds);
+        for (int ch = 0; ch < getTotalNumInputChannels(); ++ch) {
+            autoLevels[ch].startRecording(numSamples);
+        }
+        analysisPhaseState.store(2);
     }
-    else {
-        latestAnalysisResult.suggestedGainDb = 0.0f;
-    }
+    // ---- Phase 2: AutoLevel 完了判定 ----
+    else if (phase == 2 && autoLevels[0].isComplete())
+    {
+        float dryEnergyL = autoLevels[0].getDryMeanSquare();
+        float wetEnergyL = autoLevels[0].getWetMeanSquare();
+        float dryEnergyR = getTotalNumInputChannels() > 1 ? autoLevels[1].getDryMeanSquare() : dryEnergyL;
+        float wetEnergyR = getTotalNumInputChannels() > 1 ? autoLevels[1].getWetMeanSquare() : wetEnergyL;
 
-    hasNewAnalysisResult.store(true);
+        float totalDryEnergy = dryEnergyL + dryEnergyR;
+        float totalWetEnergy = wetEnergyL + wetEnergyR;
+
+        const float lufsOffset = -0.691f;
+        float dryLufs = -100.0f;
+        float wetLufs = -100.0f;
+
+        if (totalDryEnergy > 1e-10f) dryLufs = 10.0f * std::log10(totalDryEnergy) + lufsOffset;
+        if (totalWetEnergy > 1e-10f) wetLufs = 10.0f * std::log10(totalWetEnergy) + lufsOffset;
+
+        latestAnalysisResult.dryRmsL = dryLufs;
+        latestAnalysisResult.wetRmsL = wetLufs;
+        latestAnalysisResult.dryRmsR = 0.0f;
+        latestAnalysisResult.wetRmsR = 0.0f;
+
+        if (totalWetEnergy > 1e-10f && totalDryEnergy > 1e-10f) {
+            latestAnalysisResult.suggestedGainDb = dryLufs - wetLufs;
+        }
+        else {
+            latestAnalysisResult.suggestedGainDb = 0.0f;
+        }
+
+        hasNewAnalysisResult.store(true);
+        analysisPhaseState.store(3); // Done
+    }
 }
 
 #ifndef JucePlugin_PreferredChannelConfigurations
@@ -266,13 +330,28 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
     float currentBlockInPeak = 0.0f;
     float currentBlockOutPeak = 0.0f;
 
+    int currentPhase = analysisPhaseState.load(std::memory_order_relaxed);
+
     for (int channel = 0; channel < totalNumInputChannels; ++channel) {
         float* channelData = buffer.getWritePointer(channel);
         for (int sample = 0; sample < numSamples; ++sample) {
-            float s = channelData[sample] * inputGainSmoother[channel].getNextValue();
+            float rawInput = channelData[sample];
+            float s = rawInput * inputGainSmoother[channel].getNextValue();
             currentBlockInPeak = std::max(currentBlockInPeak, std::abs(s));
-            autoLevels[channel].pushDrySample(s);
+
+            // フェーズ別のサンプル記録
+            if (currentPhase == 1) {
+                // SweetSpot: 原音（InputGain前）を測定
+                autoLevels[channel].pushDrySample(rawInput);
+            } else if (currentPhase == 2) {
+                // AutoLevel: InputGain適用後の信号を測定
+                autoLevels[channel].pushDrySample(s);
+            }
+
             channelData[sample] = s;
+
+            // Listenモード用: InputGainだけを通った純粋なドライ信号を保存
+            listenDryBuffer.setSample(channel, sample, s);
         }
     }
 
@@ -315,9 +394,9 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
 
             float mixRatio = mixSmoother[channel].getNextValue();
             float mixedSignal = drySignal + (wetSignal - drySignal) * mixRatio;
-            float postMixSignal = isListenDry ? drySignal : mixedSignal;
 
-            channelData[sample] = postMixSignal;
+            // ★ Listenバイパスは最終出力ループで行う（解析用Wet信号を正しく計測するため）
+            channelData[sample] = mixedSignal;
         }
     }
 
@@ -328,11 +407,18 @@ void NeotoPreAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
 
         for (int sample = 0; sample < numSamples; ++sample) {
             float finalSignal = channelData[sample] * outputGainSmoother[channel].getNextValue();
-            autoLevels[channel].pushWetSample(finalSignal);
-            channelData[sample] = finalSignal;
-            currentBlockOutPeak = std::max(currentBlockOutPeak, std::abs(finalSignal));
 
-            if (channel == 0) pushNextSampleIntoFifo(finalSignal);
+            // AutoLevelフェーズ: 処理済み信号（OutputGain適用後）を記録
+            if (currentPhase == 2) {
+                autoLevels[channel].pushWetSample(finalSignal);
+            }
+
+            // ★ Listenモード: InputGainだけを通った完全ドライ信号を出力
+            float outputSignal = isListenDry ? listenDryBuffer.getSample(channel, sample) : finalSignal;
+            channelData[sample] = outputSignal;
+            currentBlockOutPeak = std::max(currentBlockOutPeak, std::abs(outputSignal));
+
+            if (channel == 0) pushNextSampleIntoFifo(outputSignal);
         }
     }
 

@@ -25,22 +25,28 @@ OutputSection::OutputSection(NeotoPreAudioProcessor& p) : audioProcessor(p)
     analyzeButton.setButtonText("Analyze");
     analyzeButton.setColour(juce::TextButton::buttonColourId, juce::Colours::darkcyan);
     analyzeButton.onClick = [this] {
-        // ★ AudioThreadをブロックせず、GUIスレッドへのシグナルのみを発行
-        audioProcessor.triggerAnalyze.store(true);
-        dryResultLabel.setText("Analyzing...", juce::dontSendNotification);
+        // ★ AnalyzeTimeの設定値を取得し、解析開始
+        int timeSelection = static_cast<int>(audioProcessor.apvts.getRawParameterValue("analysis_time")->load());
+        float seconds = (timeSelection == 0) ? 1.0f : (timeSelection == 1) ? 3.0f : (timeSelection == 2) ? 5.0f : 10.0f;
+        audioProcessor.startAnalysis(seconds);
+        dryResultLabel.setText("SweetSpot...", juce::dontSendNotification);
         wetResultLabel.setText("", juce::dontSendNotification);
         suggestResultLabel.setText("", juce::dontSendNotification);
+        suggestResultLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
         };
     addAndMakeVisible(analyzeButton);
 
     applyButton.setButtonText("Apply Match");
     applyButton.setColour(juce::TextButton::buttonColourId, juce::Colours::forestgreen);
     applyButton.onClick = [this] {
+        // ★ 現在のOutputGain + Suggest（差分加算）
+        float currentOutGainDb = static_cast<float>(outGainSlider.getValue());
         float suggestionDb = audioProcessor.latestAnalysisResult.suggestedGainDb;
-        float newDb = std::clamp(suggestionDb, -24.0f, 24.0f);
+        float newDb = std::clamp(currentOutGainDb + suggestionDb, -24.0f, 24.0f);
         auto* param = audioProcessor.apvts.getParameter("output_gain");
         param->setValueNotifyingHost(param->convertTo0to1(newDb));
         suggestResultLabel.setText("Applied!", juce::dontSendNotification);
+        suggestResultLabel.setColour(juce::Label::textColourId, juce::Colours::cyan);
         };
     addAndMakeVisible(applyButton);
 
@@ -81,21 +87,47 @@ void OutputSection::setupRotarySlider(juce::Slider& slider, juce::Label& label, 
 }
 
 void OutputSection::timerCallback() {
-    // ★ ここで AudioThread の外 (Message Thread) で安全に解析処理を実行
-    if (audioProcessor.triggerAnalyze.exchange(false)) {
-        int timeSelection = static_cast<int>(audioProcessor.apvts.getRawParameterValue("analysis_time")->load());
-        float seconds = (timeSelection == 0) ? 1.0f : (timeSelection == 1) ? 3.0f : (timeSelection == 2) ? 5.0f : 10.0f;
-        audioProcessor.executeAnalyzer(seconds);
+    // ★ 解析ステートマシンのフェーズ遷移を確認
+    audioProcessor.updateAnalysisState();
+
+    int phase = audioProcessor.getAnalysisPhase();
+
+    // ---- SweetSpot完了イベント ----
+    if (audioProcessor.hasSweetSpotResult.exchange(false)) {
+        float measuredDb = audioProcessor.sweetSpotMeasuredDb;
+        float gainDb = audioProcessor.sweetSpotInputGainDb;
+        dryResultLabel.setText(
+            juce::String::formatted("In: %.1f dBFS", measuredDb),
+            juce::dontSendNotification);
+        wetResultLabel.setText(
+            juce::String::formatted("Gain: %+.1f dB", gainDb),
+            juce::dontSendNotification);
     }
 
+    // ---- AutoLevel完了イベント ----
     if (audioProcessor.hasNewAnalysisResult.exchange(false)) {
         auto& res = audioProcessor.latestAnalysisResult;
-        dryResultLabel.setText(juce::String::formatted("Dry: %.1f LUFS", res.dryRmsL), juce::dontSendNotification);
-        wetResultLabel.setText(juce::String::formatted("Wet: %.1f LUFS", res.wetRmsL), juce::dontSendNotification);
+        dryResultLabel.setText(
+            juce::String::formatted("Dry: %.1f LUFS", res.dryRmsL),
+            juce::dontSendNotification);
+        wetResultLabel.setText(
+            juce::String::formatted("Wet: %.1f LUFS", res.wetRmsL),
+            juce::dontSendNotification);
         juce::String sign = res.suggestedGainDb > 0.0f ? "+" : "";
-        suggestResultLabel.setText("Suggest: " + sign + juce::String(res.suggestedGainDb, 1) + " dB", juce::dontSendNotification);
+        suggestResultLabel.setText(
+            "Suggest: " + sign + juce::String(res.suggestedGainDb, 1) + " dB",
+            juce::dontSendNotification);
         suggestResultLabel.setColour(juce::Label::textColourId, juce::Colours::lightgreen);
     }
+
+    // ---- フェーズ中の継続表示 ----
+    if (phase == 1) {
+        dryResultLabel.setText("SweetSpot...", juce::dontSendNotification);
+    } else if (phase == 2) {
+        suggestResultLabel.setText("AutoLevel...", juce::dontSendNotification);
+        suggestResultLabel.setColour(juce::Label::textColourId, juce::Colour(0xffffaa00));
+    }
+
     repaint();
 }
 
