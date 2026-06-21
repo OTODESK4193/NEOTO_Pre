@@ -17,7 +17,7 @@
   <b>Introduction</b><br>
   <a href="https://youtu.be/Au_aIhAu-r8?si=AOnDj90penIlYLcI">
     <img src="Source/Assets/Samnail.jpg"
-         alt="ANATOMY - Introduction　YoutubeLink" width="640" height="360">
+         alt="NEOTO_Pre - Introduction　YoutubeLink" width="640" height="360">
   </a>
 </p>
 
